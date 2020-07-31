@@ -22,6 +22,7 @@
 *.gcno
 *.gz
 *.i
+!drivers/input/touchscreen/focaltech_touch_3518U/include/firmware/*.bin
 *.ko
 *.lex.c
 *.ll
