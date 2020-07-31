@@ -101,6 +101,6 @@ obj-$(CONFIG_QCOM_CX_IPEAK) += cx_ipeak.o
 obj-$(CONFIG_ICNSS2) += icnss2/
 
 #//ASUS_BSP Eason: check high or low level camera device
-ifeq ($(ASUS_BUILD_PROJECT),ZS670KS)
+ifdef CONFIG_MACH_ASUS_ZS670KS
 KBUILD_CFLAGS += -DZS670KS_PROJECT
 endif
