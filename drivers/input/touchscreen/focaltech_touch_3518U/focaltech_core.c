@@ -1763,6 +1763,12 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
     fts_data->rotation_type = 0;
     fts_data->gesture_mode_enable = 0;
     fts_data->gesture_type = 0;
+    fts_data->gesture_type_m = 0;
+    fts_data->gesture_type_e = 0;
+    fts_data->gesture_type_s = 0;
+    fts_data->gesture_type_v = 0;
+    fts_data->gesture_type_w = 0;
+    fts_data->gesture_type_z = 0;
     fts_data->dclick_mode = 0;
     fts_data->swipeup_mode = 0;
     fts_data->music_control = 0;

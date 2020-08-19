@@ -38,6 +38,12 @@
 // ASUS_BSP +++ Touch
 #define ZENMOTION_LEN           8
 #define GESTURE_TYPE             "driver/gesture_type"
+#define GESTURE_TYPE_M           "driver/gesture_m"
+#define GESTURE_TYPE_E           "driver/gesture_e"
+#define GESTURE_TYPE_S           "driver/gesture_s"
+#define GESTURE_TYPE_V           "driver/gesture_v"
+#define GESTURE_TYPE_W           "driver/gesture_w"
+#define GESTURE_TYPE_Z           "driver/gesture_z"
 #define DCLICK                   "driver/dclick"
 #define SWIPEUP                  "driver/swipeup"
 
@@ -72,6 +78,12 @@ struct gesture_module {
 	unsigned int zenmotion_type[ZENMOTION_LEN];
 	atomic_t zen_motion;
 	atomic_t dclick;
+	atomic_t gesture_m;
+	atomic_t gesture_e;
+	atomic_t gesture_s;
+	atomic_t gesture_v;
+	atomic_t gesture_w;
+	atomic_t gesture_z;
 	atomic_t swipeup;
 	atomic_t aod_enable;
 	atomic_t music_control;
@@ -298,7 +310,7 @@ static ssize_t gsx_dclick_enable_show(struct goodix_ext_module *module,
 static ssize_t gsx_dclick_enable_store(struct goodix_ext_module *module,
 		const char *buf, size_t count)
 {
-  	unsigned int tmp;
+	unsigned int tmp;
 
 	if (sscanf(buf, "%u", &tmp) != 1) {
 		ts_info("Parameter illegal");
@@ -315,6 +327,156 @@ static ssize_t gsx_dclick_enable_store(struct goodix_ext_module *module,
 
 	return count;
   
+}
+
+static ssize_t gsx_gesture_e_show(struct goodix_ext_module *module,
+		char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", atomic_read(&gsx_gesture->gesture_e));
+}
+
+static ssize_t gsx_gesture_e_store(struct goodix_ext_module *module,
+		const char *buf, size_t count)
+{
+	unsigned int tmp;
+
+	if (sscanf(buf, "%u", &tmp) != 1) {
+		ts_info("Parameter illegal");
+		return -EINVAL;
+	}
+	ts_debug("Gesture E =%d", tmp);
+
+	if (tmp == 1) {
+	  atomic_set(&gsx_gesture->gesture_e, 1);
+	} else
+	  atomic_set(&gsx_gesture->gesture_e, 0);
+	return count;
+
+}
+
+static ssize_t gsx_gesture_m_show(struct goodix_ext_module *module,
+		char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", atomic_read(&gsx_gesture->gesture_m));
+}
+
+static ssize_t gsx_gesture_m_store(struct goodix_ext_module *module,
+		const char *buf, size_t count)
+{
+	unsigned int tmp;
+
+	if (sscanf(buf, "%u", &tmp) != 1) {
+		ts_info("Parameter illegal");
+		return -EINVAL;
+	}
+	ts_debug("Gesture C =%d", tmp);
+
+	if (tmp == 1) {
+	  atomic_set(&gsx_gesture->gesture_m, 1);
+	} else
+	  atomic_set(&gsx_gesture->gesture_m, 0);
+	return count;
+
+}
+
+static ssize_t gsx_gesture_s_show(struct goodix_ext_module *module,
+		char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", atomic_read(&gsx_gesture->gesture_s));
+}
+
+static ssize_t gsx_gesture_s_store(struct goodix_ext_module *module,
+		const char *buf, size_t count)
+{
+	unsigned int tmp;
+
+	if (sscanf(buf, "%u", &tmp) != 1) {
+		ts_info("Parameter illegal");
+		return -EINVAL;
+	}
+	ts_debug("Gesture S =%d", tmp);
+
+	if (tmp == 1) {
+	  atomic_set(&gsx_gesture->gesture_s, 1);
+	} else
+	  atomic_set(&gsx_gesture->gesture_s, 0);
+	return count;
+
+}
+
+static ssize_t gsx_gesture_v_show(struct goodix_ext_module *module,
+		char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", atomic_read(&gsx_gesture->gesture_v));
+}
+
+static ssize_t gsx_gesture_v_store(struct goodix_ext_module *module,
+		const char *buf, size_t count)
+{
+	unsigned int tmp;
+
+	if (sscanf(buf, "%u", &tmp) != 1) {
+		ts_info("Parameter illegal");
+		return -EINVAL;
+	}
+	ts_debug("Gesture V =%d", tmp);
+
+	if (tmp == 1) {
+	  atomic_set(&gsx_gesture->gesture_v, 1);
+	} else
+	  atomic_set(&gsx_gesture->gesture_v, 0);
+	return count;
+
+}
+
+static ssize_t gsx_gesture_w_show(struct goodix_ext_module *module,
+		char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", atomic_read(&gsx_gesture->gesture_w));
+}
+
+static ssize_t gsx_gesture_w_store(struct goodix_ext_module *module,
+		const char *buf, size_t count)
+{
+	unsigned int tmp;
+
+	if (sscanf(buf, "%u", &tmp) != 1) {
+		ts_info("Parameter illegal");
+		return -EINVAL;
+	}
+	ts_debug("Gesture W =%d", tmp);
+
+	if (tmp == 1) {
+	  atomic_set(&gsx_gesture->gesture_w, 1);
+	} else
+	  atomic_set(&gsx_gesture->gesture_w, 0);
+	return count;
+
+}
+
+static ssize_t gsx_gesture_z_show(struct goodix_ext_module *module,
+		char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", atomic_read(&gsx_gesture->gesture_z));
+}
+
+static ssize_t gsx_gesture_z_store(struct goodix_ext_module *module,
+		const char *buf, size_t count)
+{
+	unsigned int tmp;
+
+	if (sscanf(buf, "%u", &tmp) != 1) {
+		ts_info("Parameter illegal");
+		return -EINVAL;
+	}
+	ts_debug("Gesture W =%d", tmp);
+
+	if (tmp == 1) {
+	  atomic_set(&gsx_gesture->gesture_z, 1);
+	} else
+	  atomic_set(&gsx_gesture->gesture_z, 0);
+	return count;
+
 }
 
 static ssize_t gsx_zenmotion_enable_show(struct goodix_ext_module *module,
@@ -385,6 +547,18 @@ static ssize_t gsx_fod_XY_data_show(struct goodix_ext_module *module,
 const struct goodix_ext_attribute gesture_attrs[] = {
 	__EXTMOD_ATTR(type, 0666, gsx_gesture_type_show,
 		gsx_gesture_type_store),
+	__EXTMOD_ATTR(gesture_m, 0666, gsx_gesture_m_show,
+		gsx_gesture_m_store),
+	__EXTMOD_ATTR(gesture_e, 0666, gsx_gesture_e_show,
+		gsx_gesture_e_store),
+	__EXTMOD_ATTR(gesture_s, 0666, gsx_gesture_s_show,
+		gsx_gesture_s_store),
+	__EXTMOD_ATTR(gesture_v, 0666, gsx_gesture_v_show,
+		gsx_gesture_v_store),
+	__EXTMOD_ATTR(gesture_w, 0666, gsx_gesture_w_show,
+		gsx_gesture_w_store),
+	__EXTMOD_ATTR(gesture_z, 0666, gsx_gesture_z_show,
+		gsx_gesture_z_store),
 	__EXTMOD_ATTR(enable, 0666, gsx_gesture_enable_show,
 		gsx_gesture_enable_store),
 	__EXTMOD_ATTR(data, 0444, gsx_gesture_data_show, NULL),
@@ -559,6 +733,270 @@ static ssize_t asus_gesture_proc_swipeup_read(struct file *file, char __user *bu
 	return ret;
 }
 
+static ssize_t gesture_proc_gesture_m_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (strncmp(messages, "0", 1) == 0) {
+		atomic_set(&gsx_gesture->gesture_m, 0);
+	} else {
+		atomic_set(&gsx_gesture->gesture_m, 1);
+	}
+	
+	check_power();
+
+	return len;
+}
+
+static ssize_t gesture_proc_gesture_m_read(struct file *file, char __user *buf,
+							 size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff = NULL;
+
+	buff = kzalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	len += sprintf(buff, "%d\n", atomic_read(&gsx_gesture->gesture_m));
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static ssize_t gesture_proc_gesture_e_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (strncmp(messages, "0", 1) == 0) {
+		atomic_set(&gsx_gesture->gesture_e, 0);
+	} else {
+		atomic_set(&gsx_gesture->gesture_e, 1);
+	}
+	
+	check_power();
+
+	return len;
+}
+
+static ssize_t gesture_proc_gesture_e_read(struct file *file, char __user *buf,
+							 size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff = NULL;
+
+	buff = kzalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	len += sprintf(buff, "%d\n", atomic_read(&gsx_gesture->gesture_e));
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static ssize_t gesture_proc_gesture_s_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (strncmp(messages, "0", 1) == 0) {
+		atomic_set(&gsx_gesture->gesture_s, 0);
+	} else {
+		atomic_set(&gsx_gesture->gesture_s, 1);
+	}
+	
+	check_power();
+
+	return len;
+}
+
+static ssize_t gesture_proc_gesture_s_read(struct file *file, char __user *buf,
+							 size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff = NULL;
+
+	buff = kzalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	len += sprintf(buff, "%d\n", atomic_read(&gsx_gesture->gesture_s));
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static ssize_t gesture_proc_gesture_v_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (strncmp(messages, "0", 1) == 0) {
+		atomic_set(&gsx_gesture->gesture_v, 0);
+	} else {
+		atomic_set(&gsx_gesture->gesture_v, 1);
+	}
+	
+	check_power();
+
+	return len;
+}
+
+static ssize_t gesture_proc_gesture_v_read(struct file *file, char __user *buf,
+							 size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff = NULL;
+
+	buff = kzalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	len += sprintf(buff, "%d\n", atomic_read(&gsx_gesture->gesture_v));
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static ssize_t gesture_proc_gesture_w_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (strncmp(messages, "0", 1) == 0) {
+		atomic_set(&gsx_gesture->gesture_w, 0);
+	} else {
+		atomic_set(&gsx_gesture->gesture_w, 1);
+	}
+	
+	check_power();
+
+	return len;
+}
+
+static ssize_t gesture_proc_gesture_w_read(struct file *file, char __user *buf,
+							 size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff = NULL;
+
+	buff = kzalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	len += sprintf(buff, "%d\n", atomic_read(&gsx_gesture->gesture_w));
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static ssize_t gesture_proc_gesture_z_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (strncmp(messages, "0", 1) == 0) {
+		atomic_set(&gsx_gesture->gesture_z, 0);
+	} else {
+		atomic_set(&gsx_gesture->gesture_z, 1);
+	}
+	
+	check_power();
+
+	return len;
+}
+
+static ssize_t gesture_proc_gesture_z_read(struct file *file, char __user *buf,
+							 size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff = NULL;
+
+	buff = kzalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	len += sprintf(buff, "%d\n", atomic_read(&gsx_gesture->gesture_z));
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static struct file_operations gesture_proc_gesture_m_ops = {
+	.write = gesture_proc_gesture_m_write,
+	.read  = gesture_proc_gesture_m_read,
+};
+
+static struct file_operations gesture_proc_gesture_e_ops = {
+	.write = gesture_proc_gesture_e_write,
+	.read  = gesture_proc_gesture_e_read,
+};
+
+static struct file_operations gesture_proc_gesture_s_ops = {
+	.write = gesture_proc_gesture_s_write,
+	.read  = gesture_proc_gesture_s_read,
+};
+
+static struct file_operations gesture_proc_gesture_v_ops = {
+	.write = gesture_proc_gesture_v_write,
+	.read  = gesture_proc_gesture_v_read,
+};
+
+static struct file_operations gesture_proc_gesture_w_ops = {
+	.write = gesture_proc_gesture_w_write,
+	.read  = gesture_proc_gesture_w_read,
+};
+
+static struct file_operations gesture_proc_gesture_z_ops = {
+	.write = gesture_proc_gesture_z_write,
+	.read  = gesture_proc_gesture_z_read,
+};
+
 static struct file_operations asus_gesture_proc_type_ops = {
 	.write = asus_gesture_proc_type_write,
 	.read  = asus_gesture_proc_type_read,
@@ -622,6 +1060,12 @@ static int gsx_gesture_init(struct goodix_ts_core *core_data,
 	gsx_gesture->kobj_initialized = 1;
 // ASUS_BSP +++ Touch
 	atomic_set(&gsx_gesture->dclick, 0);
+	atomic_set(&gsx_gesture->gesture_m, 0);
+	atomic_set(&gsx_gesture->gesture_e, 0);
+	atomic_set(&gsx_gesture->gesture_s, 0);
+	atomic_set(&gsx_gesture->gesture_v, 0);
+	atomic_set(&gsx_gesture->gesture_w, 0);
+	atomic_set(&gsx_gesture->gesture_z, 0);
 	atomic_set(&gsx_gesture->swipeup, 0);
 	atomic_set(&gsx_gesture->aod_enable, 0);
 	atomic_set(&gsx_gesture->zen_motion, 0);
@@ -629,11 +1073,17 @@ static int gsx_gesture_init(struct goodix_ts_core *core_data,
 	atomic_set(&gsx_gesture->key_L_count, 0);
 	atomic_set(&gsx_gesture->music_control, 0);
 	check_power();
-	
+
 	proc_create(GESTURE_TYPE, 0666, NULL, &asus_gesture_proc_type_ops);
 	proc_create(DCLICK, 0666, NULL, &asus_gesture_proc_dclick_ops);
 	proc_create(SWIPEUP, 0666, NULL, &asus_gesture_proc_swipeup_ops);
-	
+	proc_create(GESTURE_TYPE_M, 0666, NULL, &gesture_proc_gesture_m_ops);
+	proc_create(GESTURE_TYPE_E, 0666, NULL, &gesture_proc_gesture_e_ops);
+	proc_create(GESTURE_TYPE_S, 0666, NULL, &gesture_proc_gesture_s_ops);
+	proc_create(GESTURE_TYPE_V, 0666, NULL, &gesture_proc_gesture_v_ops);
+	proc_create(GESTURE_TYPE_W, 0666, NULL, &gesture_proc_gesture_w_ops);
+	proc_create(GESTURE_TYPE_Z, 0666, NULL, &gesture_proc_gesture_z_ops);
+
 	INIT_DELAYED_WORK(&core_data->dclick_work, gsx_dclick_delaywork);
 // ASUS_BSP --- Touch
 
@@ -647,6 +1097,12 @@ static int gsx_gesture_exit(struct goodix_ts_core *core_data,
 	atomic_set(&gsx_gesture->registered, 0);
 // ASUS_BSP +++ Touch
 	atomic_set(&gsx_gesture->dclick, 0);
+	atomic_set(&gsx_gesture->gesture_m, 0);
+	atomic_set(&gsx_gesture->gesture_e, 0);
+	atomic_set(&gsx_gesture->gesture_s, 0);
+	atomic_set(&gsx_gesture->gesture_v, 0);
+	atomic_set(&gsx_gesture->gesture_w, 0);
+	atomic_set(&gsx_gesture->gesture_z, 0);
 	atomic_set(&gsx_gesture->swipeup, 0);
 	atomic_set(&gsx_gesture->aod_enable, 0);
 	atomic_set(&gsx_gesture->zen_motion, 0);
@@ -665,6 +1121,12 @@ static int check_power(void)
 	
 	if ((atomic_read(&gsx_gesture->zen_motion) == 0) &&
 		(atomic_read(&gsx_gesture->dclick) == 0) &&
+		(atomic_read(&gsx_gesture->gesture_m) == 0) &&
+		(atomic_read(&gsx_gesture->gesture_e) == 0) &&
+		(atomic_read(&gsx_gesture->gesture_s) == 0) &&
+		(atomic_read(&gsx_gesture->gesture_v) == 0) &&
+		(atomic_read(&gsx_gesture->gesture_w) == 0) &&
+		(atomic_read(&gsx_gesture->gesture_z) == 0) &&
 		(atomic_read(&gsx_gesture->swipeup) == 0) &&
 		(atomic_read(&gsx_gesture->aod_enable) == 0) &&
 		(atomic_read(&gsx_gesture->fp_wakeup) == 0)) {
@@ -808,48 +1270,54 @@ static int report_gesture_key(struct input_dev *dev, char keycode)
 	}
 
 	switch (keycode) {
-	case 'w': // w
-		if (gsx_gesture->zenmotion_type[1] == '1') {
-			input_switch_key(dev, KEY_W);
-			ts_info("KEY_W");
-			return 1;
-		}
-		break;
-	case 's': // S
-		if(gsx_gesture->zenmotion_type[2] == '1') {
-			input_switch_key(dev, KEY_S);
-			ts_info("KEY_S");
-			return 1;
-		}
-		break;
 	case 'e': // e
-		if(gsx_gesture->zenmotion_type[3] == '1'){
-			input_switch_key(dev, KEY_E);
-			ts_info("KEY_E");
-			return 1;
-		}
-		break;
-	case 'm': // M 
-		if(gsx_gesture->zenmotion_type[4] == '1') {
-			input_switch_key(dev, KEY_M);
-			ts_info("KEY_M");
-			return 1;
-		}
-		break;
-	case 'z': // Z
-		if(gsx_gesture->zenmotion_type[5] == '1'){
-			input_switch_key(dev, KEY_Z);
-			ts_info("KEY_Z");
-			return 1;
-		}
-		break;
+			if (atomic_read(&gsx_gesture->gesture_e)==1) {
+			input_report_key(dev, KEY_E, 1);
+			input_sync(dev);
+			input_report_key(dev, KEY_E, 0);
+			input_sync(dev);
+			}
+			break;
+	case 'm':
+			if (atomic_read(&gsx_gesture->gesture_m)==1) {
+			input_report_key(dev, KEY_M, 1);
+			input_sync(dev);
+			input_report_key(dev, KEY_M, 0);
+			input_sync(dev);
+			}
+			break;
+	case 's': // S
+			if (atomic_read(&gsx_gesture->gesture_s)==1) {
+			input_report_key(dev, KEY_S, 1);
+			input_sync(dev);
+			input_report_key(dev, KEY_S, 0);
+			input_sync(dev);
+			}
+			break;
 	case 'v': // V
-		if(gsx_gesture->zenmotion_type[6] == '1') {
-			input_switch_key(dev, KEY_V);
-			ts_info("KEY_V");
-			return 1;
-		}
-		break;
+			if (atomic_read(&gsx_gesture->gesture_v)==1) {
+			input_report_key(dev, KEY_V, 1);
+			input_sync(dev);
+			input_report_key(dev, KEY_V, 0);
+			input_sync(dev);
+			}
+			break;
+	case 'w': // w
+			if (atomic_read(&gsx_gesture->gesture_w)==1) {
+			input_report_key(dev, KEY_W, 1);
+			input_sync(dev);
+			input_report_key(dev, KEY_W, 0);
+			input_sync(dev);
+			}
+			break;
+	case 'z': // Z
+			if (atomic_read(&gsx_gesture->gesture_z)==1) {
+			input_report_key(dev, KEY_Z, 1);
+			input_sync(dev);
+			input_report_key(dev, KEY_Z, 0);
+			input_sync(dev);
+			}
+			break;
 	case 0xcc: // double click
 		if (atomic_read(&gsx_gesture->dclick)==1) {
 			input_switch_key(dev, KEY_POWER);

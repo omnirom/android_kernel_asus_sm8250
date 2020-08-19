@@ -71,6 +71,12 @@
 //#define GESTURE_C                               0x34
 
 #define GESTURE_TYPE             "driver/gesture_type"
+#define GESTURE_TYPE_M           "driver/gesture_m"
+#define GESTURE_TYPE_E           "driver/gesture_e"
+#define GESTURE_TYPE_S           "driver/gesture_s"
+#define GESTURE_TYPE_V           "driver/gesture_v"
+#define GESTURE_TYPE_W           "driver/gesture_w"
+#define GESTURE_TYPE_Z           "driver/gesture_z"
 #define DCLICK                   "driver/dclick"
 #define SWIPEUP                  "driver/swipeup"
 /*****************************************************************************
@@ -837,6 +843,269 @@ static ssize_t asus_gesture_proc_swipeup_write(struct file *filp, const char *bu
 	return len;
 }
 
+static ssize_t gesture_proc_gesture_m_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (strncmp(messages, "0", 1) == 0) {
+		fts_data->gesture_mode_m = 0;
+		printk("[Focal][Touch] gesture_mode_m_disable ! \n");
+	} else {
+		fts_data->gesture_mode_m = 1;
+		printk("[Focal][Touch] gesture_mode_m_enable ! \n");
+	}
+	return len;
+}
+
+static ssize_t gesture_proc_gesture_m_read(struct file *file, char __user *buf,
+							 size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff = NULL;
+
+	buff = kzalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	len += sprintf(buff, "%d\n", fts_data->gesture_mode_m);
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static ssize_t gesture_proc_gesture_e_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (strncmp(messages, "0", 1) == 0) {
+		fts_data->gesture_mode_e = 0;
+		printk("[Focal][Touch] gesture_mode_e_disable ! \n");
+	} else {
+		fts_data->gesture_mode_e = 1;
+		printk("[Focal][Touch] gesture_mode_e_enable ! \n");
+	}
+
+	return len;
+}
+
+static ssize_t gesture_proc_gesture_e_read(struct file *file, char __user *buf,
+							 size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff = NULL;
+
+	buff = kzalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	len += sprintf(buff, "%d\n", fts_data->gesture_mode_e);
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static ssize_t gesture_proc_gesture_s_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (strncmp(messages, "0", 1) == 0) {
+		fts_data->gesture_mode_s = 0;
+		printk("[Focal][Touch] gesture_mode_s_disable ! \n");
+	} else {
+		fts_data->gesture_mode_s = 1;
+		printk("[Focal][Touch] gesture_mode_s_enable ! \n");
+	}
+
+	return len;
+}
+
+static ssize_t gesture_proc_gesture_s_read(struct file *file, char __user *buf,
+							 size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff = NULL;
+
+	buff = kzalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	len += sprintf(buff, "%d\n", fts_data->gesture_mode_s);
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static ssize_t gesture_proc_gesture_v_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (strncmp(messages, "0", 1) == 0) {
+		fts_data->gesture_mode_v = 0;
+		printk("[Focal][Touch] gesture_mode_v_disable ! \n");
+	} else {
+		fts_data->gesture_mode_v = 1;
+		printk("[Focal][Touch] gesture_mode_v_enable ! \n");
+	}
+
+	return len;
+}
+
+static ssize_t gesture_proc_gesture_v_read(struct file *file, char __user *buf,
+							 size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff = NULL;
+
+	buff = kzalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	len += sprintf(buff, "%d\n", fts_data->gesture_mode_v);
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static ssize_t gesture_proc_gesture_w_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (strncmp(messages, "0", 1) == 0) {
+		fts_data->gesture_mode_w = 0;
+		printk("[Focal][Touch] gesture_mode_w_disable ! \n");
+	} else {
+		fts_data->gesture_mode_w = 1;
+		printk("[Focal][Touch] gesture_mode_w_enable ! \n");
+	}
+
+	return len;
+}
+
+static ssize_t gesture_proc_gesture_w_read(struct file *file, char __user *buf,
+							 size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff = NULL;
+
+	buff = kzalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	len += sprintf(buff, "%d\n", fts_data->gesture_mode_w);
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static ssize_t gesture_proc_gesture_z_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (strncmp(messages, "0", 1) == 0) {
+		fts_data->gesture_mode_z = 0;
+		printk("[Focal][Touch] gesture_mode_z_disable ! \n");
+	} else {
+		fts_data->gesture_mode_z = 1;
+		printk("[Focal][Touch] gesture_mode_z_enable ! \n");
+	}
+
+	return len;
+}
+
+static ssize_t gesture_proc_gesture_z_read(struct file *file, char __user *buf,
+							 size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff = NULL;
+
+	buff = kzalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	len += sprintf(buff, "%d\n", fts_data->gesture_mode_z);
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static struct file_operations gesture_proc_gesture_m_ops = {
+	.write = gesture_proc_gesture_m_write,
+	.read  = gesture_proc_gesture_m_read,
+};
+
+static struct file_operations gesture_proc_gesture_e_ops = {
+	.write = gesture_proc_gesture_e_write,
+	.read  = gesture_proc_gesture_e_read,
+};
+
+static struct file_operations gesture_proc_gesture_s_ops = {
+	.write = gesture_proc_gesture_s_write,
+	.read  = gesture_proc_gesture_s_read,
+};
+
+static struct file_operations gesture_proc_gesture_v_ops = {
+	.write = gesture_proc_gesture_v_write,
+	.read  = gesture_proc_gesture_v_read,
+};
+
+static struct file_operations gesture_proc_gesture_w_ops = {
+	.write = gesture_proc_gesture_w_write,
+	.read  = gesture_proc_gesture_w_read,
+};
+
+static struct file_operations gesture_proc_gesture_z_ops = {
+	.write = gesture_proc_gesture_z_write,
+	.read  = gesture_proc_gesture_z_read,
+};
+
 static struct file_operations asus_gesture_proc_type_ops = {
 	.write = asus_gesture_proc_type_write,
 	.read  = asus_gesture_proc_type_read,
@@ -902,6 +1171,12 @@ int fts_gesture_init(struct fts_ts_data *ts_data)
 	proc_create(GESTURE_TYPE, 0666, NULL, &asus_gesture_proc_type_ops);
 	proc_create(DCLICK, 0666, NULL, &asus_gesture_proc_dclick_ops);
 	proc_create(SWIPEUP, 0666, NULL, &asus_gesture_proc_swipeup_ops);
+	proc_create(GESTURE_TYPE_M, 0666, NULL, &gesture_proc_gesture_m_ops);
+	proc_create(GESTURE_TYPE_E, 0666, NULL, &gesture_proc_gesture_e_ops);
+	proc_create(GESTURE_TYPE_S, 0666, NULL, &gesture_proc_gesture_s_ops);
+	proc_create(GESTURE_TYPE_V, 0666, NULL, &gesture_proc_gesture_v_ops);
+	proc_create(GESTURE_TYPE_W, 0666, NULL, &gesture_proc_gesture_w_ops);
+	proc_create(GESTURE_TYPE_Z, 0666, NULL, &gesture_proc_gesture_z_ops);
 // ASUS_SZ_BSP Yadong ---
 
     FTS_FUNC_EXIT();
