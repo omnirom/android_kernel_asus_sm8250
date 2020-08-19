@@ -181,6 +181,12 @@ struct fts_ts_data {
     bool glove_mode;
     bool cover_mode;
     bool charger_mode;
+    bool gesture_mode_m;
+    bool gesture_mode_e;
+    bool gesture_mode_s;
+    bool gesture_mode_v;
+    bool gesture_mode_w;
+    bool gesture_mode_z;
     bool gesture_mode;      /* gesture enable or disable, default: disable */
     bool gesture_mode_enable;
     bool dclick_mode;
@@ -188,7 +194,13 @@ struct fts_ts_data {
     bool music_control;
     bool game_mode;         /* game mode enable or disable, default: disable */
     int rotation_type;      /* rotation type 0/1/2, default: 0 */
-    u8 gesture_type;        /* 8 bit: music_control V Z M e S W Main_Switch */
+    u8 gesture_type;        /* 8 bit: music_control V Z M e S W Main_Switch Start*/
+    u8 gesture_type_m;
+    u8 gesture_type_e;
+    u8 gesture_type_s;
+    u8 gesture_type_v;
+    u8 gesture_type_w;
+    u8 gesture_type_z;        /* 8 bit: music_control V Z M e S W Main_Switch End*/
     /* multi-touch */
     struct ts_event *events;
     u8 *bus_tx_buf;
