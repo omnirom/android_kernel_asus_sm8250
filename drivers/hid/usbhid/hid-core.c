@@ -79,6 +79,9 @@ static int hid_submit_out(struct hid_device *hid);
 static int hid_submit_ctrl(struct hid_device *hid);
 static void hid_cancel_delayed_stuff(struct usbhid_device *usbhid);
 
+static unsigned long resume_time = 0;
+static unsigned long diff_time = 0;
+
 /* Start up the input URB */
 static int hid_start_in(struct hid_device *hid)
 {
@@ -276,17 +279,30 @@ static void hid_irq_in(struct urb *urb)
 	struct hid_device	*hid = urb->context;
 	struct usbhid_device	*usbhid = hid->driver_data;
 	int			status;
+	bool skip = false;
+
+	if ( (hid->vendor == 0x0CF2) && (hid->product == 0x7750) ){
+		diff_time = (jiffies_64 - resume_time);
+		if ( jiffies_to_msecs(abs(diff_time)) < 100 ){
+			printk("[EC_HID][0x%x:0x%x] %u ms in debounce time 100 ms\n", hid->vendor, hid->product, diff_time);
+			skip = true;
+		}
+	}
 
 	switch (urb->status) {
 	case 0:			/* success */
 		usbhid->retry_delay = 0;
+		if (!test_bit(HID_RESUME_RUNNING, &usbhid->iofl)) {
+			// Skip ENE HID keyboard if block_hid_input set true
 		if (!test_bit(HID_OPENED, &usbhid->iofl))
 			break;
 		usbhid_mark_busy(usbhid);
-		if (!test_bit(HID_RESUME_RUNNING, &usbhid->iofl)) {
-			hid_input_report(urb->context, HID_INPUT_REPORT,
-					 urb->transfer_buffer,
-					 urb->actual_length, 1);
+		if(!skip)
+				hid_input_report(urb->context, HID_INPUT_REPORT,
+				urb->transfer_buffer,
+				urb->actual_length, 1);
+			else
+				printk("[EC_HID][0x%x:0x%x] skip input event\n", hid->vendor, hid->product);
 			/*
 			 * autosuspend refused while keys are pressed
 			 * because most keyboards don't wake up when
@@ -1650,6 +1666,11 @@ static int hid_resume(struct usb_interface *intf)
 {
 	struct hid_device *hid = usb_get_intfdata (intf);
 	int status;
+
+	if ((hid->vendor == 0x0CF2) && (hid->product == 0x7750)){
+		resume_time = jiffies_64;
+		//printk("[EC_HID] hid_resume : resume_time = %u\n", resume_time);
+	}
 
 	status = hid_resume_common(hid, true);
 	dev_dbg(&intf->dev, "resume status %d\n", status);
