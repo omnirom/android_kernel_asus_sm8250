@@ -4239,6 +4239,8 @@ static const struct attribute_group pca9468_attr_group = {
 
 #ifdef ASUS_ZS661KS_PROJECT
 void pca9468_enable_slow_charging(bool enable) {
+	int ret;
+	
 	if (enable) {
 		printk("pca9468_enable_slow_charging: enable slow charging\n");
 		g_panel_off_iin = 1000000;
@@ -4254,6 +4256,12 @@ void pca9468_enable_slow_charging(bool enable) {
 		g_inov_overtemp_iin = 2000000;
 		g_inov_overtemp_iin_low = 1400000;
 	}
+	
+	pca9468_chg_dev->ta_cur = g_panel_on_iin;
+	/* Send PD Message */
+	ret = pca9468_send_pd_message(pca9468_chg_dev, PD_MSG_REQUEST_APDO);
+	if (ret < 0)
+		CHG_DBG("pca9468_send_pd_message fail\n");
 }
 #endif
 

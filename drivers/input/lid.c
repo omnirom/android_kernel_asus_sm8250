@@ -101,6 +101,8 @@ static void lid_report_function(struct work_struct *work)
 	/* ASUS BSP DP --- */
 #endif
 
+	msleep(50);
+
 	input_report_switch(ddata->input, SW_LID, value);
 	input_sync(ddata->input);
 	//bat_get_hal_sensor_status(value);//Notify the status of hall-sensor to charger
