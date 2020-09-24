@@ -65,21 +65,26 @@
 #define GOODIX_PEN_DRIVER_NAME		"goodix_ts,pen"
 #define GOODIX_DRIVER_VERSION		"v1.4.3.1"
 #define GOODIX_BUS_RETRY_TIMES		5
-#define GOODIX_MAX_TOUCH		20
+#define GOODIX_MAX_TOUCH		10
 #define GOODIX_CFG_MAX_SIZE		4096
 #define GOODIX_ESD_TICK_WRITE_DATA	0xAA
 #define GOODIX_PID_MAX_LEN		8
 #define GOODIX_VID_MAX_LEN		8
 // ASUS_BSP +++ Touch
 #define GOODIX_ADDR_SPECIAL_CMD			0x4160
+#define GOODIX_ADDR_GOODIX_DEBUG_CMD	0x4154
 #define GOODIX_ADDR_EXTERNAL_CMD		0x4280
-#define GOODIX_ADDR_READ_EXTERNAL_CMD	0x60BB
+// before FW(25) 0x60BB; after FW(27) 0x4290
+#define GOODIX_ADDR_READ_EXTERNAL_CMD	0x4290
+#define BUF_LEN_4154 12
 
 #define GOODIX_CMD_SAMPLE_RATE		0x40
 #define GOODIX_CMD_ROTATION			0x41
 #define GOODIX_CMD_GAMING			0x42
 #define GOODIX_CMD_CHARGE_MODE_ON	0x6
 #define GOODIX_CMD_CHARGE_MODE_OFF	0x7
+#define TOTAL_SLOT 					20
+#define GOODIX_ASUS_MAX_TOUCH		GOODIX_MAX_TOUCH + TOTAL_SLOT
 
 #define GOODIX_DEFAULT_CFG_NAME		"goodix_9896_config.cfg"
 #define GOODIX_TEST_CFG_NAME		"goodix_9896_config_test.cfg"
@@ -490,6 +495,7 @@ struct goodix_ts_core {
 	bool disable_fod;
 	bool game_mode;
 	bool station_insert;
+	bool phone_call_on;
 	int aod_test_mode;
 	int rotation;
 	int dfps;

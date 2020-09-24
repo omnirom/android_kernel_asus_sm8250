@@ -77,6 +77,9 @@ static const struct of_device_id dsi_display_dt_match[] = {
 #define HBM_MODE_OFF_DELAY           "driver/hbm_off_delay"
 #define INITIAL_CODE_VERSION         "driver/lcd_code_version"
 
+// HDCP version
+#define HDCP_VERSION                 "hdcp_version"
+int  g_hdcp_version = 1;
 
 static struct mutex asus_display_cmd_mutex;
 
@@ -96,15 +99,16 @@ char lcd_stage[10];
 // variables that only used for test
 bool asus_var_regulator_always_on = false; //display power never turned off
 bool asus_var_global_hbm_pending = false;  //display global hbm pending
-int  asus_var_hbm_fps_list[4]  = {60, 90, 120, 144};
-int  asus_var_hbm_on_delay[4]  = {50, 35,  25,  18};  //delay time in ms to hang fod layer after hbm on
-int  asus_var_hbm_off_delay[4] = {50, 44,  33,  27};  //delay time in ms to hang fod layer after hbm off
-int  asus_var_hbm_off_delay_aod[4] = {50,50,50, 50};  //delay time in ms to hang fod layer after hbm off in aod
+int  asus_var_hbm_fps_list[5]      = {60, 90, 120, 144, 160};
+int  asus_var_hbm_on_delay[5]      = {33, 22,  17,  14,  12}; //delay time in ms to hang fod layer after hbm on  (2 vsyncs)
+int  asus_var_hbm_off_delay[5]     = {50, 33,  25,  21,  19}; //delay time in ms to hang fod layer after hbm off (3 vsyncs)
+int  asus_var_hbm_off_delay_aod[5] = {50, 50,  50,  50,  50}; //delay time in ms to hang fod layer after hbm off in aod (no longer needed)
 
 // variables external
 extern int  asus_current_fps;           //from drm_atomic_helper.c
 extern bool need_change_fps;            //from drm_atomic_helper.c
 extern bool asus_fps_overriding;        //from drm_atomic_helper.c
+extern bool asus_blocking_fps_until_bootup;
 extern bool g_Charger_mode;             //from cmdline
 extern bool g_Recovery_mode;            //from cmdline
 extern bool old_has_fov_makser;         //from sde_crtc.c
@@ -179,9 +183,21 @@ bool asus_display_in_normal_off(void)
 }
 EXPORT_SYMBOL(asus_display_in_normal_off);
 
+int asus_display_global_hbm_mode(void)
+{
+	return g_display->panel->asus_global_hbm_mode;
+}
+EXPORT_SYMBOL(asus_display_global_hbm_mode);
+
+static int dsi_display_dynamic_clk_configure_cmd(struct dsi_display *d, int c);
 void asus_display_apply_fps_setting(void)
 {
 	if (!asus_display_valid()) {
+		return;
+	}
+
+	if (g_display->panel->asus_global_hbm_mode == 1) {
+		printk("[Display] skip fps %d due to GHBM\n", asus_current_fps);
 		return;
 	}
 
@@ -195,7 +211,17 @@ void asus_display_apply_fps_setting(void)
 		dsi_panel_asus_switch_fps(g_display->panel, 3);
 	else if (asus_current_fps == 160)
 		dsi_panel_asus_switch_fps(g_display->panel, 4);
+
+	if (asus_current_fps == 160)
+		dsi_display_dynamic_clk_configure_cmd(g_display, 0);
 }
+
+extern int sde_encoder_wait_for_event(struct drm_encoder *drm_encoder, enum msm_event_wait event);
+void asus_display_wait_for_vsync(void)
+{
+	sde_encoder_wait_for_event(g_display->bridge->base.encoder, MSM_ENC_VBLANK);
+}
+EXPORT_SYMBOL(asus_display_wait_for_vsync);
 
 void asus_display_check_idle_mode(bool want_idle)
 {
@@ -218,7 +244,7 @@ void asus_display_check_idle_mode(bool want_idle)
 	if (asus_display_in_aod() && !want_idle) {
 		pr_err("[Display] manual set idle (%d)\n", want_idle);
 		dsi_panel_set_idle(g_display->panel, want_idle);
-		//asus_display_apply_fps_setting();
+		asus_display_apply_fps_setting();
 		asus_var_manual_idle_out = true;
 	}
 #endif
@@ -251,6 +277,7 @@ static void asus_display_reset_brightness_workfunc(struct work_struct *ws){
 		dsi_panel_set_hbm(g_display->panel, g_display->panel->asus_hbm_mode);
 	}
 }
+
 void asus_primary_display_commit(void)
 {
 	if (asus_var_global_hbm_pending) {
@@ -272,9 +299,16 @@ void asus_primary_display_commit(void)
 			udelay(asus_display_get_global_hbm_delay(false)*1000);
 			asus_drm_notify(ASUS_NOTIFY_GHBM_ON_READY, 0);
 			g_display->panel->asus_global_hbm_mode = 0;
+			asus_display_set_dimming(0); // reset dimming parameter
+			asus_display_apply_fps_setting(); // restore correct target fps setting
 			pr_err("[Display] globalHbm set to 0");
 		}
 	}
+}
+
+void asus_display_report_fod_touched(void)
+{
+	asus_drm_notify(ASUS_NOTIFY_FOD_TOUCHED, 1);
 }
 
 //
@@ -506,6 +540,10 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 error:
 	mutex_unlock(&panel->panel_lock);
 	/* ASUS BSP Display +++ */
+	// delay backlight setting by fps
+	if (panel->asus_bl_delay != 0)
+		udelay(panel->asus_bl_delay);
+
 	asus_display_set_dimming(bl_lvl);
 	return rc;
 }
@@ -1367,6 +1405,10 @@ int dsi_display_set_power(struct drm_connector *connector,
 	switch (power_mode) {
 	case SDE_MODE_DPMS_LP1:
 		pr_err("[Display] enter LP1 doze\n");
+		if (g_display->panel->asus_global_hbm_mode && asus_var_manual_idle_out) {
+			printk("[Display] BUG: do not enter LP1 while GHBM\n");
+			break;
+		}
 		if (asus_var_manual_idle_out || !asus_display_in_aod()) {
 			pr_err("[Display] set LP1 command\n");
 			rc = dsi_panel_set_lp1(display->panel);
@@ -4547,6 +4589,15 @@ static int dsi_display_dynamic_clk_configure_cmd(struct dsi_display *display,
 {
 	int rc = 0;
 
+	if (asus_current_fps > 144) {
+		if (g_display && g_display->panel->asus_boost_panel_clock_rate_hz > 0)
+			clk_rate = g_display->panel->asus_boost_panel_clock_rate_hz;
+		else
+			clk_rate = 860000000;
+	}
+
+	printk("[Display] update clock rate to %ld \n", clk_rate);
+
 	if (clk_rate <= 0) {
 		DSI_ERR("%s: bitrate should be greater than 0\n", __func__);
 		return -EINVAL;
@@ -4561,7 +4612,7 @@ static int dsi_display_dynamic_clk_configure_cmd(struct dsi_display *display,
 
 	rc = dsi_display_update_dsi_bitrate(display, clk_rate);
 	if (!rc) {
-		DSI_INFO("%s: bit clk is ready to be configured to '%d'\n",
+		printk("[Display] %s: bit clk is ready to be configured to '%d'\n",
 				__func__, clk_rate);
 		atomic_set(&display->clkrate_change_pending, 1);
 	} else {
@@ -5141,12 +5192,12 @@ static int dsi_display_force_update_dsi_clk(struct dsi_display *display)
 	rc = dsi_display_link_clk_force_update_ctrl(display->dsi_clk_handle);
 
 	if (!rc) {
-		DSI_INFO("dsi bit clk has been configured to %d\n",
+		printk("[Display] dsi bit clk has been configured to %d\n",
 			display->cached_clk_rate);
 
 		atomic_set(&display->clkrate_change_pending, 0);
 	} else {
-		DSI_ERR("Failed to configure dsi bit clock '%d'. rc = %d\n",
+		DSI_ERR("[Display] Failed to configure dsi bit clock '%d'. rc = %d\n",
 			display->cached_clk_rate, rc);
 	}
 
@@ -5431,6 +5482,11 @@ int dsi_display_asus_dfps(struct dsi_display *display, int type)
 		return -EINVAL;
 	}
 
+	if (type == 4 && g_display->panel->asus_global_hbm_mode == 1) {
+		printk("[Display] skip fps 160 due to GHBM\n");
+		return rc;
+	}
+
 	mutex_lock(&display->display_lock);
 
 	rc = dsi_panel_asus_switch_fps(display->panel, type);
@@ -5438,6 +5494,8 @@ int dsi_display_asus_dfps(struct dsi_display *display, int type)
 		pr_err("[%s] failed to enable DSI panel, rc=%d\n",
 			display->name, rc);
 	}
+	if (type == 4)
+		rc = dsi_display_dynamic_clk_configure_cmd(g_display, 0);
 
 	mutex_unlock(&display->display_lock);
 	return rc;
@@ -5633,6 +5691,13 @@ void asus_display_set_dimming(u32 cur_bl)
 
 	if (bl_count == 1) {
 		asus_display_set_tcon_cmd(dimming, sizeof(dimming), 0);
+
+		// first boot, second backlight only
+		if (asus_blocking_fps_until_bootup) {
+			printk("[Display] first dim, reset fps\n");
+			asus_blocking_fps_until_bootup = false; //reset it along with first backlight dim
+			need_change_fps = true;
+		}
 	}
 
 	dsi_panel_bl_delay(g_display->panel);
@@ -6360,6 +6425,7 @@ static ssize_t asus_display_proc_fps_write(struct file *filp, const char *buff, 
 {
 	char messages[256];
 	int fps_wanted = 120;
+	int type = 0;
 
 	memset(messages, 0, sizeof(messages));
 
@@ -6373,17 +6439,22 @@ static ssize_t asus_display_proc_fps_write(struct file *filp, const char *buff, 
 
 	if (strncmp(messages, "160", 3) == 0) {
 		fps_wanted = 160;
+		type = 4;
 	} else if (strncmp(messages, "144", 3) == 0) {
 		fps_wanted = 144;
+		type = 3;
 	} else if (strncmp(messages, "120", 3) == 0) {
 		fps_wanted = 120;
+		type = 0;
 	} else if (strncmp(messages, "90", 2) == 0) {
 		fps_wanted = 90;
+		type = 1;
 	} else if (strncmp(messages, "60", 2) == 0) {
 		fps_wanted = 60;
+		type = 2;
 	} else if (strncmp(messages, "0", 1) == 0) {
 		asus_fps_overriding = false;
-		fps_wanted = 120;
+		fps_wanted = 90;
 		return len;
 	} else {
 		pr_err("[Display] don't match any avaiable fps.\n");
@@ -6394,8 +6465,9 @@ static ssize_t asus_display_proc_fps_write(struct file *filp, const char *buff, 
 		pr_err("[Display] skip fps change, already is fps %d\n", fps_wanted);
 	} else {
 		pr_err("[Display] changing fps to %d\n", fps_wanted);
-		need_change_fps = true;
+		//need_change_fps = true;
 		asus_current_fps = fps_wanted;
+		dsi_panel_asus_switch_fps(g_display->panel, type);
 		asus_fps_overriding = true;
 	}
 
@@ -6433,7 +6505,7 @@ static struct file_operations asus_display_proc_fps_ops = {
  */
 int asus_display_find_fps_index(int fps) {
 	int i = 0;
-	for(i = 0; i < 4; i++) {
+	for(i = 0; i < 5; i++) {
 		if (asus_var_hbm_fps_list[i] == fps)
 			return i;
 	}
@@ -6615,6 +6687,56 @@ static struct file_operations asus_display_proc_power_mode_ops = {
 	.read  = asus_display_proc_power_mode_read,
 };
 /* ASUS BSP Display --- */
+
+/* ASUS HDCP +++*/
+static ssize_t asus_display_proc_hdcp_version_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+	printk("[Display] hdcp_version write +++ \n");
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (strncmp(messages, "0", 1) == 0) {
+		printk("[Display] hdcp_version set to HDCP2.2\n");
+		g_hdcp_version = 0;
+	} else if (strncmp(messages, "1", 1) == 0) {
+		printk("[Display] hdcp_version set to HDCP2.3\n");
+		g_hdcp_version = 1;
+	} else {
+		pr_err("[HDCP] don't match any hdcp version.\n");
+	}
+	printk("[Display] hdcp_version write --- \n");
+	return len;
+}
+
+static ssize_t asus_display_proc_hdcp_version_read(struct file *file, char __user *buf,
+							 size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff;
+
+	buff = kzalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	printk("[HDCP] hdcp version is %d\n", g_hdcp_version);
+
+	len += sprintf(buff, "%d\n", g_hdcp_version);
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static struct file_operations asus_display_proc_hdcp_version_ops = {
+	.write = asus_display_proc_hdcp_version_write,
+	.read  = asus_display_proc_hdcp_version_read,
+};
+/* ASUS HDCP ---*/
 
 static int dsi_display_validate_split_link(struct dsi_display *display)
 {
@@ -6874,6 +6996,8 @@ static int dsi_display_bind(struct device *dev,
 	proc_create(HBM_MODE_ON_DELAY, 0666, NULL, &asus_display_proc_hbm_on_delay_ops);
 	proc_create(HBM_MODE_OFF_DELAY, 0666, NULL, &asus_display_proc_hbm_off_delay_ops);
 	proc_create(INITIAL_CODE_VERSION, 0666, NULL, &asus_display_proc_initial_command_version_ops);
+	/* ASUS HDCP */
+	proc_create(HDCP_VERSION, 0666, NULL, &asus_display_proc_hdcp_version_ops);
 
 	asus_display_wq = create_workqueue("asus_lcd_wq");
 	/* ASUS BSP Display --- */
@@ -8005,6 +8129,8 @@ int dsi_display_get_modes(struct dsi_display *display,
 			struct dsi_display_mode *sub_mode =
 					&display->modes[array_idx];
 			u32 curr_refresh_rate;
+			int max_fps = 144; //all rate based on 144 fps
+			u64 boost_panel_clock_rate_hz = 860000000;
 
 			if (!sub_mode) {
 				DSI_ERR("invalid mode data\n");
@@ -8020,9 +8146,43 @@ int dsi_display_get_modes(struct dsi_display *display,
 
 			curr_refresh_rate = sub_mode->timing.refresh_rate;
 			sub_mode->timing.refresh_rate = dfps_caps.dfps_list[i];
+			printk("[Display] (original) timing.refresh_rate = %d", sub_mode->timing.refresh_rate);
 
 			dsi_display_get_dfps_timing(display, sub_mode,
 					curr_refresh_rate);
+
+			printk("[Display] (original) timing.clk_rate_hz = %lld, timing.min_dsi_clk_hz = %lld, pixel_clk_khz = %lld\n",
+					sub_mode->timing.clk_rate_hz, sub_mode->timing.min_dsi_clk_hz, sub_mode->pixel_clk_khz);
+
+			if (g_display) {
+				if (g_display->panel->asus_boost_panel_clock_rate_hz > 0)
+					boost_panel_clock_rate_hz = g_display->panel->asus_boost_panel_clock_rate_hz;
+			}
+
+			// adjust mode attributes on each frame rate
+			if (sub_mode->timing.refresh_rate > max_fps) {
+				sub_mode->timing.clk_rate_hz    = boost_panel_clock_rate_hz;
+				sub_mode->timing.min_dsi_clk_hz = 848796375;
+				sub_mode->pixel_clk_khz         = 143236;
+
+				sub_mode->priv_info->min_dsi_clk_hz = sub_mode->priv_info->min_dsi_clk_hz;
+				sub_mode->priv_info->dsi_transfer_time_us = sub_mode->priv_info->dsi_transfer_time_us;
+				sub_mode->priv_info->mdp_transfer_time_us = sub_mode->priv_info->mdp_transfer_time_us;
+			} else {
+				sub_mode->timing.clk_rate_hz = (sub_mode->timing.clk_rate_hz / max_fps) * sub_mode->timing.refresh_rate;
+				sub_mode->timing.min_dsi_clk_hz = (sub_mode->timing.min_dsi_clk_hz / max_fps) * sub_mode->timing.refresh_rate;
+				sub_mode->pixel_clk_khz = (sub_mode->pixel_clk_khz / max_fps) * sub_mode->timing.refresh_rate;
+
+				sub_mode->priv_info->min_dsi_clk_hz = (sub_mode->priv_info->min_dsi_clk_hz / max_fps) * sub_mode->timing.refresh_rate;
+				sub_mode->priv_info->dsi_transfer_time_us = sub_mode->priv_info->dsi_transfer_time_us * max_fps / sub_mode->timing.refresh_rate;
+				sub_mode->priv_info->mdp_transfer_time_us = sub_mode->priv_info->mdp_transfer_time_us * max_fps / sub_mode->timing.refresh_rate;
+			}
+
+			printk("[Display] (adjusted) timing.clk_rate_hz = %lld, timing.min_dsi_clk_hz = %lld, pixel_clk_khz = %lld\n",
+					sub_mode->timing.clk_rate_hz, sub_mode->timing.min_dsi_clk_hz, sub_mode->pixel_clk_khz);
+			printk("[Display] (adjusted) priv_info->min_dsi_clk_hz = %lld\n",
+					sub_mode->priv_info->min_dsi_clk_hz);
+
 		}
 		end = array_idx;
 		/*
@@ -8153,11 +8313,7 @@ int dsi_display_find_mode(struct dsi_display *display,
 	for (i = 0; i < count; i++) {
 		struct dsi_display_mode *m = &display->modes[i];
 
-		if (cmp->timing.v_active == m->timing.v_active &&
-			cmp->timing.h_active == m->timing.h_active &&
-			cmp->timing.refresh_rate == m->timing.refresh_rate &&
-			cmp->panel_mode == m->panel_mode &&
-			cmp->pixel_clk_khz == m->pixel_clk_khz) {
+		if (cmp->timing.refresh_rate == m->timing.refresh_rate) {
 			*out_mode = m;
 			rc = 0;
 			break;
@@ -8366,9 +8522,9 @@ int dsi_display_set_mode(struct dsi_display *display,
 		goto error;
 	}
 
-	DSI_INFO("mdp_transfer_time_us=%d us\n",
+	printk("[Display] mdp_transfer_time_us=%d us\n",
 			adj_mode.priv_info->mdp_transfer_time_us);
-	DSI_INFO("hactive= %d,vactive= %d,fps=%d\n",
+	printk("[Display] hactive= %d,vactive= %d,fps=%d\n",
 			timing.h_active, timing.v_active,
 			timing.refresh_rate);
 
@@ -8907,16 +9063,8 @@ error:
 	if (!asus_var_osc_reg_feteched) {
 		asus_display_read_panel_osc(display);
 
-		if (asus_current_fps >= 60 && asus_current_fps < 90)
-			dsi_panel_asus_switch_fps(display->panel, 2);
-		else if (asus_current_fps >= 90 && asus_current_fps < 120)
-			dsi_panel_asus_switch_fps(display->panel, 1);
-		else if (asus_current_fps >= 120 && asus_current_fps < 144)
-			dsi_panel_asus_switch_fps(display->panel, 0);
-		else if (asus_current_fps == 160)
-			dsi_panel_asus_switch_fps(display->panel, 4);
-		else
-			dsi_panel_asus_switch_fps(display->panel, 3);
+		printk("[Display] first boot set 60 fps, type 2\n");
+		dsi_panel_asus_switch_fps(display->panel, 2);
 	}
 	/* ASUS BSP Display --- */
 

@@ -557,6 +557,7 @@ static void _msm_drm_commit_work_cb(struct kthread_work *work)
 	struct msm_commit *commit = NULL;
 	bool commit_for_fod_spot = false;
 	bool commit_for_fod_masker = false;
+	bool report_fod_spot_disappear = false;
 
 	if (!work) {
 		DRM_ERROR("%s: Invalid commit work data!\n", __func__);
@@ -578,16 +579,22 @@ static void _msm_drm_commit_work_cb(struct kthread_work *work)
 		printk("[Display] commit FOD spot to panel +++ \n");
 		commit_for_fod_spot = true;
 	} else if (!has_fod_spot && fod_spot_ui_ready) {
-		printk("[Display] removing fod spot \n");
-		asus_drm_notify(ASUS_NOTIFY_SPOT_READY, 0);
+		report_fod_spot_disappear = true;
 	}
 
 	SDE_ATRACE_BEGIN("complete_commit");
 	complete_commit(commit);
 	SDE_ATRACE_END("complete_commit");
 
+	if (report_fod_spot_disappear) {
+		asus_drm_notify(ASUS_NOTIFY_SPOT_READY, 0);
+		printk("[Display] removed fod spot \n");
+	}
+
 	if (commit_for_fod_spot) {
-		printk("[Display] commit FOD spot to panel --- \n");
+		int period_ms = 1000000 / asus_current_fps;
+		printk("[Display] commit FOD spot to panel (%d) --- \n", period_ms);
+		udelay(period_ms);
 		asus_drm_notify(ASUS_NOTIFY_SPOT_READY, 1);
 	}
 	if (commit_for_fod_masker) {

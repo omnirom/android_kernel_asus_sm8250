@@ -48,6 +48,7 @@ extern void phone_touch_suspend(void);
  */
 extern bool asus_display_in_aod(void);
 extern bool asus_display_in_normal_off(void);
+extern void asus_display_wait_for_vsync(void);
 extern char asus_var_osc_reg_p20_value;
 extern bool asus_var_regulator_always_on;
 static bool asus_var_regulator_last_on = true;
@@ -74,9 +75,11 @@ char *get_last_backlight_value(void)
 }
 EXPORT_SYMBOL(get_last_backlight_value);
 
-int g_station_hbm_mode = 0;
-EXPORT_SYMBOL(g_station_hbm_mode);
+extern int g_station_hbm_mode;
 extern int ec_i2c_set_hbm(char enable);
+
+extern void dp_panel_resume(void);
+extern void dp_panel_suspend(void);
 /* ASUS BSP DP --- */
 
 enum dsi_dsc_ratio_type {
@@ -524,6 +527,8 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 	phone_touch_resume();
 	// ASUS_BSP --- Touch
 
+	dp_panel_resume(); /* ASUS BSP DP +++ */
+
 	goto exit;
 
 error_disable_gpio:
@@ -576,6 +581,8 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 	phone_touch_suspend();
 	// ASUS_BSP --- Touch
 
+	dp_panel_suspend(); /* ASUS BSP DP +++ */
+
 	if (asus_var_regulator_always_on)
 		return rc;
 
@@ -589,6 +596,7 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 				panel->name, rc);
 
 	asus_var_regulator_last_on = false;
+
 
 	return rc;
 }
@@ -743,6 +751,9 @@ int asus_display_convert_backlight(struct dsi_panel *panel, int bl_lvl)
 			backlight_converted = asus_alpm_bl_low;
 			pr_err("[Display] convert to %d, reason AOD\n", asus_alpm_bl_low);
 		}
+	} else if (bl_lvl < 400) {
+		pr_err("[Display] convert to 400, reason pixelworks\n");
+		backlight_converted = 400;
 	}
 
 	return backlight_converted;
@@ -760,13 +771,6 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	}
 
 	pr_err("[Display] request bl=%d\n", bl_lvl);
-	bl_lvl = asus_display_convert_backlight(panel, bl_lvl);
-
-	dsi = &panel->mipi_device;
-
-	rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
-	if (rc < 0)
-		DSI_ERR("failed to update dcs backlight:%d\n", bl_lvl);
 
 	/* ASUS BSP DP, bl for station +++ */
 	if (gDongleType == 2)
@@ -776,9 +780,13 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 		lastBL = (int)bl_lvl;
 	/* ASUS BSP DP, bl for station --- */
 
-	// delay backlight setting by fps
-	if (panel->asus_bl_delay != 0)
-		udelay(panel->asus_bl_delay);
+	bl_lvl = asus_display_convert_backlight(panel, bl_lvl);
+
+	dsi = &panel->mipi_device;
+
+	rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
+	if (rc < 0)
+		DSI_ERR("failed to update dcs backlight:%d\n", bl_lvl);
 
 	return rc;
 }
@@ -3388,14 +3396,26 @@ error:
 	return rc;
 }
 
-static int dsi_panel_parse_asus_command_version(struct dsi_panel *panel,
+static int dsi_panel_parse_asus_dtsi_attributes(struct dsi_panel *panel,
 				struct dsi_parser_utils *utils)
 {
 	const char *dtsi_code_ver;
 	const char *dtsi_code_desc;
+	u64 tmp64 = 0;
+	int rc = 0;
 
 	if (!panel || !utils)
 		return -EINVAL;
+
+	rc = utils->read_u64(utils->data,
+			"asus,mdss-dsi-panel-boost-clockrate", &tmp64);
+	if (rc == -EOVERFLOW) {
+		tmp64 = 0;
+		rc = utils->read_u32(utils->data,
+			"asus,mdss-dsi-panel-boost-clockrate", (u32 *)&tmp64);
+	}
+	panel->asus_boost_panel_clock_rate_hz = !rc ? tmp64 : 0;
+	printk("[Display] parsed boost panel clock rate hz = %lld\n", panel->asus_boost_panel_clock_rate_hz);
 
 	dtsi_code_ver = utils->get_property(utils->data,
 			"asus,mdss-dsi-command-version", NULL);
@@ -3985,7 +4005,7 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 		}
 
 		// parse asus initial code version
-		rc = dsi_panel_parse_asus_command_version(panel, utils);
+		rc = dsi_panel_parse_asus_dtsi_attributes(panel, utils);
 		if (rc) {
 			printk("failed to parse asus command params, rc=%d\n", rc);
 		}
@@ -4732,7 +4752,9 @@ int dsi_panel_asus_switch_fps(struct dsi_panel *panel, int type)
 		return -EINVAL;
 	}
 
-	printk("[Display] set panel fps %d command\n", asus_current_fps);
+	printk("[Display] set panel fps cmd, type %d\n", type);
+
+	asus_display_wait_for_vsync();
 
 	mutex_lock(&panel->panel_lock);
 

@@ -157,6 +157,8 @@ static void _sde_core_perf_calc_crtc(struct sde_kms *kms,
 	// use default max core clock rate as ROG2
 	if (asus_var_ever_power_off)
 		perf->core_clk_rate = 460000000;
+	else
+		perf->core_clk_rate = 459999999;
 
 	SDE_EVT32(DRMID(crtc), perf->core_clk_rate,
 		GET_H32(perf->bw_ctl[SDE_POWER_HANDLE_DBUS_ID_MNOC]),
@@ -1006,6 +1008,9 @@ static ssize_t _sde_core_perf_threshold_high_read(struct file *file,
 	return len;
 }
 
+// ASUS BSP DisplayPort +++
+extern bool asus_display_in_normal_off(void);
+
 static ssize_t _sde_core_perf_mode_write(struct file *file,
 		    const char __user *user_buf, size_t count, loff_t *ppos)
 {
@@ -1014,6 +1019,13 @@ static ssize_t _sde_core_perf_mode_write(struct file *file,
 	u32 perf_mode = 0;
 	char buf[10];
 	int ret = 0;
+
+	// ASUS BSP DisplayPort +++
+	if (asus_display_in_normal_off()) {
+		pr_err("[Display] performance mode return.\n");
+		return -EFAULT;
+	}
+	// ASUS BSP DisplayPort ---
 
 	if (!perf)
 		return -ENODEV;

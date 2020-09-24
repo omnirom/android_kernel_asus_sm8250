@@ -98,7 +98,11 @@ u32 GoodixTSTimeStamp = 0;
 u8 TouchArea = 0;
 // ASUS_BSP --- Touch
 
-
+// ASUS_BSP +++
+extern void asus_debug_led_on(void);
+extern void asus_debug_led_off(void);
+extern bool g_LED_debug;
+// ASUS_BSP ---
 
 int goodix_ts_core_init(void);
 #ifdef CONFIG_OF
@@ -1439,6 +1443,8 @@ static void goodix_parse_finger_nor(struct goodix_ts_device *dev,
 	pre_key_map = cur_key_map;
 }
 
+int release_count = 0;
+
 static void goodix_parse_finger_ys(struct goodix_ts_device *dev,
 	struct goodix_touch_data *touch_data, unsigned char *buf, int touch_num)
 {
@@ -1476,6 +1482,11 @@ static void goodix_parse_finger_ys(struct goodix_ts_device *dev,
 	}
 	pre_finger_map = cur_finger_map;
 	touch_data->touch_num = touch_num;
+
+	//LED_debug +++
+	if (touch_num == 0 && g_LED_debug == 1)
+		asus_debug_led_off();
+	//LED_debug ---
 }
 
 static unsigned int goodix_pen_btn_code[] = {BTN_STYLUS, BTN_STYLUS2};
@@ -1553,7 +1564,6 @@ static int goodix_touch_handler_ys(struct goodix_ts_device *dev,
 
 	static u8 pre_finger_num = 0;
 	static u8 pre_pen_num = 0;
-
 	/* clean event buffer */
 	memset(ts_event, 0, sizeof(*ts_event));
 	/* copy pre-data to buffer */
@@ -1640,6 +1650,12 @@ static int goodix_touch_handler_ys(struct goodix_ts_device *dev,
 		}
 // ASUS_BSP --- Touch
 	}
+
+	//LED_debug +++
+	if (touch_num >= 1 && g_LED_debug == 1)
+		asus_debug_led_on();
+	//LED_debug ---
+
 exit_clean_sta:
 	return r;
 }

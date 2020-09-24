@@ -40,7 +40,8 @@
 /* ASUS BSP Display +++ */
 struct drm_display_mode *asus_drm_display_mode;
 bool asus_first_boot = true;
-bool need_change_fps = false;
+bool asus_blocking_fps_until_bootup = true;
+bool need_change_fps = true;
 int asus_current_fps = 144;
 bool asus_fps_overriding = false;
 
@@ -48,6 +49,7 @@ extern bool asus_display_in_aod(void);
 /* ASUS BSP Display --- */
 
 /* ASUS BSP DP +++ */
+extern bool g_station_pm_suspend;
 EXPORT_SYMBOL(asus_current_fps);
 #endif
 
@@ -323,6 +325,14 @@ update_connector_routing(struct drm_atomic_state *state,
 		if (new_connector_state->crtc) {
 			crtc_state = drm_atomic_get_new_crtc_state(state, new_connector_state->crtc);
 			crtc_state->connectors_changed = true;
+#ifdef ASUS_ZS661KS_PROJECT
+			/* ASUS BSP DP +++ */
+			if (!strcmp(new_connector_state->crtc->name, "crtc-1")) {
+				pr_err("[msm-dp] set connectors_changed to false first.\n", __func__);
+				crtc_state->connectors_changed = false;
+			}
+			/* ASUS BSP DP --- */
+#endif
 		}
 	}
 
@@ -627,6 +637,11 @@ drm_atomic_helper_check_modeset(struct drm_device *dev,
 					need_change_fps = true;
 				}
 			}
+
+#ifdef ASUS_ZS661KS_PROJECT
+			if (asus_blocking_fps_until_bootup)
+				need_change_fps = false;
+#endif
 		}
 		/* ASUS BSP Display --- */
 #endif
@@ -723,12 +738,26 @@ drm_atomic_helper_check_modeset(struct drm_device *dev,
 			 */
 			new_crtc_state->mode_changed = true;
 			new_crtc_state->connectors_changed = true;
+#ifdef ASUS_ZS661KS_PROJECT
+			/* ASUS BSP DP +++ */
+			if (!strcmp(crtc->name, "crtc-1") && g_station_pm_suspend) {
+				new_crtc_state->mode_changed = false;
+				new_crtc_state->connectors_changed = false;
+			}
+			/* ASUS BSP DP --- */
+#endif
 		}
 
 		if (old_crtc_state->active != new_crtc_state->active) {
 			DRM_DEBUG_ATOMIC("[CRTC:%d:%s] active changed\n",
 					 crtc->base.id, crtc->name);
 			new_crtc_state->active_changed = true;
+#ifdef ASUS_ZS661KS_PROJECT
+			/* ASUS BSP DP +++ */
+			if (!strcmp(crtc->name, "crtc-1") && g_station_pm_suspend)
+				new_crtc_state->active_changed = false;
+			/* ASUS BSP DP --- */
+#endif
 		}
 
 		if (new_crtc_state->enable != has_connectors) {

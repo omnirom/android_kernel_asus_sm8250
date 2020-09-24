@@ -14,6 +14,7 @@ void drm_sysfs_hotplug_event(struct drm_device *dev);
 #define ASUS_NOTIFY_GHBM_ON_REQ        0
 #define ASUS_NOTIFY_GHBM_ON_READY      1
 #define ASUS_NOTIFY_SPOT_READY         2
+#define ASUS_NOTIFY_FOD_TOUCHED        3
 
 void asus_drm_notify(int var, int value);
 #endif

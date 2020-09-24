@@ -90,7 +90,13 @@ struct dp_debug {
 	u8 *(*get_edid)(struct dp_debug *dp_debug);
 	void (*abort)(struct dp_debug *dp_debug);
 
-	bool aux_err; /* ASUS BSP DP */
+	/* ASUS BSP DP +++ */
+	bool aux_err;
+	u32 debug_bpp;
+	u8 debug_swing;
+	u8 debug_pre_emp;
+	bool debug_lt; // link training
+	/* ASUS BSP DP --- */
 };
 
 /**

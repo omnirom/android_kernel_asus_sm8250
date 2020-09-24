@@ -15,6 +15,7 @@
 /* ASUS BSP DP +++ */
 char *asus_vendor = NULL;
 bool force_hdcp1x = false;
+bool force_dp_version = false;
 /* ASUS BSP DP --- */
 
 enum data_block_types {
@@ -230,6 +231,12 @@ static void sde_edid_extract_vendor_id(struct sde_edid_ctrl *edid_ctrl)
 		force_hdcp1x = true;
 	else
 		force_hdcp1x = false;
+
+	// for PA329C
+	if (!strncmp(asus_vendor, "AUS", 3) && proc_codes == 0x326)
+		force_dp_version = true;
+	else
+		force_dp_version = false;
 	/* ASUS BSP DP --- */
 
 	SDE_EDID_DEBUG("vendor id is %s ", vendor_id);

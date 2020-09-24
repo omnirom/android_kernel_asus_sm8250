@@ -3664,7 +3664,7 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc,
 
 	/* ASUS BSP Display +++ */
 	if (display_commit_cnt > 0 && !strcmp(crtc->name, "crtc-0")) {
-		pr_err("fbc%d\n", display_commit_cnt);
+		pr_err("[Display] fbc%d\n", display_commit_cnt);
 		display_commit_cnt--;
 	}
 	/* ASUS BSP Display --- */
