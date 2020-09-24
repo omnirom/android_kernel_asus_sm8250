@@ -382,8 +382,8 @@ static int snt_i2c_probe(struct i2c_client *i2c,
     struct device_node *np = dev->of_node;
     struct snt8100fsr *snt8100fsr;
     PRINT_FUNC();
-    PRINT_INFO("snt_i2c_probe Enter\n");
-	
+    PRINT_INFO("snt_i2c_probe Enter, 0x%02X", i2c->addr);
+
     snt8100fsr = kzalloc(sizeof(*snt8100fsr),
                                  GFP_KERNEL);
 
@@ -472,7 +472,7 @@ static int snt_i2c_probe(struct i2c_client *i2c,
     // Start our sysfs interface
     snt_sysfs_init(snt8100fsr_g, true);
 
-    PRINT_DEBUG("done");
+    PRINT_INFO("snt_i2c_probe End\n");
     return 0;
 }
 
@@ -493,6 +493,12 @@ static int snt_i2c_remove(struct i2c_client *i2c)
     // Else we are on the main i2c device, uninit the sysfs interface
     if (snt8100fsr_g) {
         snt_sysfs_init(snt8100fsr_g, false);
+        device_init_wakeup(snt8100fsr->dev, false);
+        mutex_destroy(&snt8100fsr_g->track_report_sysfs_lock);
+        mutex_destroy(&snt8100fsr_g->sb_lock);
+        mutex_destroy(&snt8100fsr_g->ap_lock);
+        mutex_destroy(&snt8100fsr_g->tap_lock);
+        mutex_destroy(&snt8100fsr_g->IRQ_WAKE_SLEEP_LOCK);
     }
 
     main_exit();
@@ -552,6 +558,31 @@ static struct i2c_driver snt_i2c_driver = {
 };
 
 MODULE_DEVICE_TABLE(i2c, snt_i2c_id);
+//module_i2c_driver(snt_i2c_driver);
 
-module_i2c_driver(snt_i2c_driver);
+extern void upload_wq_func(struct work_struct *work_orig);
+extern struct delayed_work own_work;
+static int __init snt_fst_i2c_init(void)
+{
+	PRINT_INFO("INIT");
+	i2c_add_driver(&snt_i2c_driver);
+	
+	INIT_DELAYED_WORK(&own_work, upload_wq_func);
+	PRINT_INFO("Call load firmware workqueue");
+	schedule_delayed_work(&own_work, msecs_to_jiffies(5000));
+	PRINT_INFO("END");
+	return 0;
+}
+
+static void __exit snt_fst_i2c_exit(void)
+{
+	i2c_del_driver(&snt_i2c_driver);
+	PRINT_INFO("EXIT");
+}
+
+module_init(snt_fst_i2c_init);
+module_exit(snt_fst_i2c_exit);
+MODULE_DESCRIPTION("snt8155  Hardware Module");
+MODULE_AUTHOR("snt8155, Inc.");
+MODULE_LICENSE("GPL v2"); 
 #endif

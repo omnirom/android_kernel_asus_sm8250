@@ -53,7 +53,7 @@ extern void create_Grip_Swipe_velocity_proc_file(void);
 extern void create_Grip_Swipe_len_proc_file(void);
 extern void create_Grip_Swipe_min_pos_proc_file(void);
 extern void create_Grip_Swipe_max_pos_proc_file(void);
-extern void create_asusGripDebug_proc_file(void);
+
 
 extern void create_Grip_Tap1_En_proc_file(void);
 extern void create_Grip_Tap2_En_proc_file(void);

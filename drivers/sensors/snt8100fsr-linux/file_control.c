@@ -87,15 +87,22 @@ void Reset_Func(struct work_struct *work);
 static int Health_Check_Enable_No_Delay(int en);
 //static void Enable_tap_sensitive(const char *buf, size_t count);
 static void Grip_Apply_Golden_K(void);
-
+static void Read_Grip_K_data(void);
 //Check grip all gesture status, 1: enable, 0:disable
 static int grip_all_gesture_status(void);
 
 //Check grip game gesture (tap/slide/swipe) status, 1: enable, 0:disable
 int grip_game_gesture_status(void);
 
-/* [TODO] undefined func */
-//extern void dw7914_enable_trigger2(int channel, bool enable);
+//vibrator en/disable func
+extern int aw8697_trig_control(int num, bool enable);
+
+/* ASUS BSP Clay: setting vibrator trig1 & trig2 register for different tap modes +++ */
+extern int G_grip_tap_vib1_reg;
+extern int G_grip_tap_vib2_reg;
+static void gripVibratorSetting(int val, int tap_id);
+/* ASUS BSP Clay--- */
+
 #ifdef DYNAMIC_PWR_CTL
 extern int snt_activity_request(void);
 #endif
@@ -138,7 +145,8 @@ struct miscdevice sentons_snt_misc = {
 };
 
 /* K data related parameters */
-static const uint16_t Grip_Golden = 0x5E46; /* v1 is used before WW PR2 and CN PR */
+static const uint16_t Grip_Golden = 0x5F69; /* v1 is used before WW PR2 and CN PR */
+static const uint16_t Grip_Golden_MP = 0x6E5A; /* v1 is used before WW PR2 and CN PR */
 static const float Grip_K_Scaling_factory = 1; /* v1 is used before WW PR2 and CN PR */
 
 static const uint16_t Grip_Golden_V1 = 0x5E46; /* v1 is used before WW PR2 and CN PR */
@@ -195,6 +203,18 @@ static uint16_t Slide_sense_reset_data[3] = {
 		0x804b 
 };
 
+static uint16_t Swipe_sense_data1[3] = { 
+		0x0400,
+		0x0000,
+		0x8057 
+};
+
+static uint16_t Swipe_sense_data2[3] = { 
+		0x3E80,
+		0x0000,
+		0x8058 
+};
+
 static uint16_t sys_param_addr[3] = { 
 		0x42, 
 		0x43, 
@@ -209,6 +229,16 @@ struct delayed_work rst_recovery_wk;
 
 /* reset chip when i2c error or chip can't be waked up  */
 struct delayed_work rst_gpio_wk;
+
+static int Grip_Check_FW_Status(void){
+	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
+		mutex_unlock(&snt8100fsr_g->ap_lock);
+		snt8100fsr_g->Recovery_Flag = 1;
+		return 1;
+	}else{
+		return 0;
+	}
+}
 
 void Grip_Chip_IRQ_EN(bool flag){
 	uint16_t irq_val = 0;
@@ -628,21 +658,84 @@ static void grip_check_DPC_and_sensitivity_func(void){
 	}
 }
 
+static void grip_set_sys_param(const char *buf){
+	int l = (int)strlen(buf) + 1;
+	uint32_t val;
+	uint32_t id;
+	int status;
+	int ret;
+	PRINT_INFO("buf=%s, size=%d", buf, l);
+	
+#ifdef DYNAMIC_PWR_CTL
+	if (snt_activity_request() != 0) {
+		PRINT_CRIT("snt_activity_request() failed");
+		return;
+	}
+#endif
+
+	status  = ReadNumFromBuf((const uint8_t**)&buf, &l, &id);
+	if (status != 0) {
+		PRINT_CRIT("Could not parse param_id %d", status);
+		goto errexit;
+	}
+
+	status = ReadNumFromBuf((const uint8_t**)&buf, &l, &val);
+	if (status != 0) {
+		PRINT_CRIT("Could not parse param_val %d", status);
+		goto errexit;
+	}
+	if (enable_set_sys_param(snt8100fsr_g, id, val) != 0) {
+		PRINT_DEBUG("send of set sys param failed");
+		goto errexit;
+	}
+
+	// wait for response from driver irpt thread
+	PRINT_DEBUG("SetSysParam Rsp -- wait");
+	do {
+		ret = down_interruptible(&snt8100fsr_g->sc_wf_rsp);
+		PRINT_DEBUG("SetSysParam Rsp -- acquired %d", ret);
+	} while (ret == -EINTR);
+
+errexit:
+    PRINT_DEBUG("done.");
+    return;
+}
+
 static void grip_slide_swipe_status_check(void){
 	int i = 0;
-		if(grip_status_g->G_SLIDE_EN[0] == 1 || grip_status_g->G_SLIDE_EN[1] == 1
-			|| grip_status_g->G_SWIPE_EN[0] == 1 || grip_status_g->G_SWIPE_EN[1] == 1){	
-			for(i = 0; i < 3; i++){
-				PRINT_INFO("write 0x%x=0x%x", sys_param_addr[i], Slide_sense_data[i]);
-				write_register(snt8100fsr_g, sys_param_addr[i], &Slide_sense_data[i]);
-			}
-		}else if(grip_status_g->G_SLIDE_EN[0] <= 0 && grip_status_g->G_SLIDE_EN[1] <= 0
-			&& grip_status_g->G_SWIPE_EN[0] <= 0 && grip_status_g->G_SWIPE_EN[1] <= 0){
-			for(i = 0; i < 3; i++){
-				PRINT_INFO("write 0x%x=0x%x", sys_param_addr[i], Slide_sense_reset_data[i]);
-				write_register(snt8100fsr_g, sys_param_addr[i], &Slide_sense_reset_data[i]);
-			}
+	uint16_t enable_sensitive_boost = 0x84;
+	uint16_t disable_sensitive_boost = 0x4;
+	uint16_t boost_addr = 0x3d;
+	const char *buf = "86 4000000";
+	if(grip_status_g->G_SLIDE_EN[0] == 1 || grip_status_g->G_SLIDE_EN[1] == 1
+		|| grip_status_g->G_SWIPE_EN[0] == 1 || grip_status_g->G_SWIPE_EN[1] == 1){	
+		for(i = 0; i < 3; i++){
+			PRINT_INFO("write 0x%x=0x%x", sys_param_addr[i], Slide_sense_data[i]);
+			write_register(snt8100fsr_g, sys_param_addr[i], &Slide_sense_data[i]);
 		}
+	}else if(grip_status_g->G_SLIDE_EN[0] <= 0 && grip_status_g->G_SLIDE_EN[1] <= 0
+		&& grip_status_g->G_SWIPE_EN[0] <= 0 && grip_status_g->G_SWIPE_EN[1] <= 0){
+		for(i = 0; i < 3; i++){
+			PRINT_INFO("write 0x%x=0x%x", sys_param_addr[i], Slide_sense_reset_data[i]);
+			write_register(snt8100fsr_g, sys_param_addr[i], &Slide_sense_reset_data[i]);
+		}
+	}
+
+	if(grip_status_g->G_SWIPE_EN[0] == 1 || grip_status_g->G_SWIPE_EN[1] == 1){
+		grip_set_sys_param(buf);
+		write_register(snt8100fsr_g, boost_addr, &enable_sensitive_boost);
+		for(i = 0; i < 3; i++){
+			PRINT_INFO("write 0x%x=0x%x", sys_param_addr[i], Swipe_sense_data1[i]);
+			write_register(snt8100fsr_g, sys_param_addr[i], &Swipe_sense_data1[i]);
+		}
+		for(i = 0; i < 3; i++){
+			PRINT_INFO("write 0x%x=0x%x", sys_param_addr[i], Swipe_sense_data2[i]);
+			write_register(snt8100fsr_g, sys_param_addr[i], &Swipe_sense_data2[i]);
+		}
+		write_register(snt8100fsr_g, boost_addr, &enable_sensitive_boost);
+	}else{
+		write_register(snt8100fsr_g, boost_addr, &disable_sensitive_boost);
+	}
 }
 /**************** +++ wrtie DPC & Frame function +++ **************/
 void grip_frame_rate_func(int val){
@@ -688,11 +781,7 @@ void grip_frame_rate_func(int val){
 
 /**************** +++ wrtie gesture function +++ **************/
 void grip_enable_func_noLock(int val){
-	if(snt8100fsr_g->grip_fw_loading_status == false){
-		grip_status_g->G_EN= 0;
-		PRINT_INFO("Load fw fail, skip grip enable function");
-		return;
-	}
+
 	if(Snt_Power_State == 0){
 		grip_status_g->G_EN= 0;
 		PRINT_INFO("Grip Sensor Power off, skip grip enable function");
@@ -704,6 +793,12 @@ void grip_enable_func_noLock(int val){
 		//mutex_unlock(&snt8100fsr_g->ap_lock);
 		grip_status_g->G_EN= val;
 		PRINT_INFO("chip_reset_flag = %d", snt8100fsr_g->chip_reset_flag);
+		return;
+	}
+
+	if(snt8100fsr_g->grip_fw_loading_status == false){
+		grip_status_g->G_EN= 0;
+		PRINT_INFO("Load fw fail, skip grip enable function");
 		return;
 	}
 	if(val == 1){ //turn on
@@ -759,10 +854,8 @@ void grip_raw_enable_func(int val){
 		return;
 	}
 	grip_status_g->G_RAW_EN = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	if(Grip_Check_FW_Status()){ return; }
+	
 	Wait_Wake_For_RegW();
 	if(val == 0){
 		val = 1;
@@ -878,15 +971,17 @@ void grip_tap_enable_func(int tap_id, int val, uint16_t* reg ) {
 		grip_status_g->G_EN = 0;
 		
 	/* when G_EN=0 which means that all gestures close, don't wakeup chip and do setting */
-	if(grip_status_g->G_EN == 1){		
-		if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-			PRINT_INFO("chip_reset_flag = %d", snt8100fsr_g->chip_reset_flag);
-			mutex_unlock(&snt8100fsr_g->ap_lock);
-			return;
-		}
+	if(grip_status_g->G_EN == 1){
+		if(Grip_Check_FW_Status()){ return; }
+		
 		Wait_Wake_For_RegW();
 		*reg = (*reg & 0xFFFE) | ( val & 0x0001);
 		set_tap_gesture(tap_id, *reg, 0);
+
+		/* ASUS BSP Clay: setting vibrator trig1 & trig2 register for different tap modes +++ */
+		gripVibratorSetting(val, tap_id);
+		/* ASUS BSP Clay:--- */
+		
 		//get_tap_gesture(0, *reg, 0, tap_id*8 +9);
 		grip_check_DPC_and_sensitivity_func();
 		
@@ -935,10 +1030,8 @@ void grip_tap_force_func(int tap_id, int val, uint16_t* reg ) {
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_FORCE[tap_id] = val;
 	
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	val = val << 8;
 	*reg = (val & 0xFF00) | ( *reg & 0x00FF);
@@ -983,10 +1076,8 @@ void grip_tap_min_position_func(int tap_id, int val, uint16_t* reg ) {
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_MIN_POS[tap_id] = val;
 	
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = val;
 	set_tap_gesture(tap_id, *reg, 2);
@@ -1030,10 +1121,8 @@ void grip_tap_max_position_func(int tap_id, int val, uint16_t* reg ) {
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_MAX_POS[tap_id] = val;
 	
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = val;
 	set_tap_gesture(tap_id, *reg, 3);
@@ -1075,10 +1164,9 @@ void grip_tap_sense_enable_func(int val){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_SENSE_SET= val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+
+	if(Grip_Check_FW_Status()){return;}
+
 	Wait_Wake_For_RegW();
 	grip_check_DPC_and_sensitivity_func();
 	mutex_unlock(&snt8100fsr_g->ap_lock);
@@ -1092,10 +1180,8 @@ void grip_tap_slope_window_func(int tap_id, int val, uint16_t* reg ) {
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_SLOPE_WINDOW[tap_id] = val;
 	
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = val | (*reg & 0xFF00);
 	set_tap_gesture(tap_id, *reg, 1);
@@ -1138,10 +1224,9 @@ void grip_tap_slope_release_force_func(int tap_id, int val, uint16_t* reg ) {
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_SLOPE_RELEASE_FORCE[tap_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+
+	if(Grip_Check_FW_Status()){return;}
+
 	Wait_Wake_For_RegW();
 	*reg = val<<8 | (*reg & 0x00FF);
 	set_tap_gesture(tap_id, *reg, 5);
@@ -1185,10 +1270,9 @@ void grip_tap_slope_tap_force_func(int tap_id, int val, uint16_t* reg ) {
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_SLOPE_TAP_FORCE[tap_id] = val;
 	
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+
+	if(Grip_Check_FW_Status()){return;}
+
 	Wait_Wake_For_RegW();
 	*reg = val | (*reg & 0xFF00);
 	set_tap_gesture(tap_id, *reg, 5);
@@ -1232,10 +1316,8 @@ void grip_tap_delta_tap_force_func(int tap_id, int val, uint16_t* reg ) {
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_DELTA_TAP_FORCE[tap_id] = val;
 	
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	if(Grip_Check_FW_Status()){return;}
+
 	Wait_Wake_For_RegW();
 	*reg = val | (*reg & 0xFF00);
 	set_tap_gesture(tap_id, *reg, 4);
@@ -1279,10 +1361,8 @@ void grip_tap_delta_release_force_func(int tap_id, int val, uint16_t* reg ) {
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_DELTA_RELEASE_FORCE[tap_id] = val;
 	
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	if(Grip_Check_FW_Status()){return;}
+
 	Wait_Wake_For_RegW();
 	*reg = val<<8  | (*reg & 0x00FF);
 	set_tap_gesture(tap_id, *reg, 4);
@@ -1317,7 +1397,66 @@ void grip_tap2_delta_release_force_func(int val){
 	//grip_tap3_delta_release_force_func(val);
 }
 
-extern int GRIP_TAP_LINK_VIBRATOR;
+/* ASUS BSP Clay: setting vibrator trig1 & trig2 register for different tap modes +++ */
+static void gripVibratorSetting(int val, int tap_id){
+	static uint16_t reg_val[4] = { 0x1, 0x2, 0x8, 0x20 };
+	PRINT_INFO("Tap_id=%d, EN=%d, VIB_EN=%d, 0x%x, 0x%x", 
+		tap_id,	grip_status_g->G_TAP_EN[tap_id],
+		grip_status_g->G_TAP_VIB_EN[tap_id],
+		G_grip_tap_vib1_reg, G_grip_tap_vib2_reg);
+	
+	if(g_ASUS_hwID >= HW_REV_PR){
+		if(val && grip_status_g->G_TAP_EN[tap_id]==1 && grip_status_g->G_TAP_VIB_EN[tap_id]==1){
+			if(tap_id == 1){
+				if(grip_status_g->G_TAP_EN[tap_id]==1 && grip_status_g->G_TAP_EN[tap_id+2]==1){
+					PRINT_INFO("Double tap case");
+					/* tap2 */
+					G_grip_tap_vib1_reg = G_grip_tap_vib1_reg & (0xffff - reg_val[tap_id]);
+					G_grip_tap_vib2_reg = G_grip_tap_vib2_reg | reg_val[tap_id];
+				}else{
+					G_grip_tap_vib1_reg = G_grip_tap_vib1_reg | reg_val[tap_id];
+					G_grip_tap_vib2_reg = G_grip_tap_vib2_reg & (0xffff - reg_val[tap_id]);
+				}
+			}else if(tap_id == 3){
+				if(grip_status_g->G_TAP_EN[tap_id-2]==1	&& grip_status_g->G_TAP_VIB_EN[tap_id-2]==1){
+					PRINT_INFO("Double tap case");
+					/* tap2 */
+					G_grip_tap_vib1_reg = G_grip_tap_vib1_reg & (0xffff - reg_val[tap_id-2]);
+					G_grip_tap_vib2_reg = G_grip_tap_vib2_reg | reg_val[tap_id-2];
+				}
+				G_grip_tap_vib1_reg = G_grip_tap_vib1_reg | reg_val[tap_id];
+			}else if(tap_id == 2){
+				G_grip_tap_vib2_reg = G_grip_tap_vib2_reg | reg_val[tap_id];
+			}else{
+				G_grip_tap_vib1_reg = G_grip_tap_vib1_reg | reg_val[tap_id];
+			}			
+		}else{
+			G_grip_tap_vib1_reg = G_grip_tap_vib1_reg & (0xffff - reg_val[tap_id]);
+			G_grip_tap_vib2_reg = G_grip_tap_vib2_reg & (0xffff - reg_val[tap_id]);
+			//tap3 off or tap3_vib off
+			//recovery case: tap2 on and tap2_vib on 
+			if(tap_id==3 && grip_status_g->G_TAP_EN[tap_id-2]==1 
+				&& grip_status_g->G_TAP_VIB_EN[tap_id-2]==1){
+				PRINT_INFO("Double tap to One tap");
+				G_grip_tap_vib1_reg = G_grip_tap_vib1_reg | reg_val[tap_id-2];
+				G_grip_tap_vib2_reg = G_grip_tap_vib2_reg & (0xffff - reg_val[tap_id-2]);
+			}
+		}
+	}else{
+		if(val && grip_status_g->G_TAP_EN[tap_id]==1 && grip_status_g->G_TAP_VIB_EN[tap_id]==1){
+			G_grip_tap_vib1_reg = G_grip_tap_vib1_reg | reg_val[tap_id];
+		}else{
+			G_grip_tap_vib1_reg = G_grip_tap_vib1_reg & (0xffff - reg_val[tap_id]);
+		}
+	}
+	Wait_Wake_For_RegW();
+	write_register(snt8100fsr_g, REGISTER_TIRGGER_LINK1, &G_grip_tap_vib1_reg);
+	write_register(snt8100fsr_g, REGISTER_TIRGGER_LINK2, &G_grip_tap_vib2_reg);
+	PRINT_INFO("[0x%x] = 0x%x, [0x%x] = 0x%x", 
+		REGISTER_TIRGGER_LINK1, G_grip_tap_vib1_reg,
+		REGISTER_TIRGGER_LINK2, G_grip_tap_vib2_reg);
+}
+/* ASUS BSP--- */
 void grip_tapX_vibrator_enable_func(int val, int tap_id){
 	if(grip_status_g->G_EN <= 0){
 		PRINT_INFO("Skip setting when grip off");
@@ -1326,40 +1465,13 @@ void grip_tapX_vibrator_enable_func(int val, int tap_id){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_VIB_EN[tap_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
-	Wait_Wake_For_RegW();
-	if(tap_id==0){
-		/* 0x1a Bit 1 overwrite */
-		if(val == 0)
-			GRIP_TAP_LINK_VIBRATOR = GRIP_TAP_LINK_VIBRATOR & 0xFFFE;
-		else 
-			GRIP_TAP_LINK_VIBRATOR = GRIP_TAP_LINK_VIBRATOR | 0x1;
-	}else if(tap_id==1){
-		/* 0x1a Bit 2 overwrite */
-		if(val == 0)
-			GRIP_TAP_LINK_VIBRATOR = GRIP_TAP_LINK_VIBRATOR & 0xFFFD;
-		else 
-			GRIP_TAP_LINK_VIBRATOR = GRIP_TAP_LINK_VIBRATOR | 0x2;
-	}
-	if(tap_id==2){
-		/* 0x1a Bit 4 overwrite */
-		if(val == 0)
-			GRIP_TAP_LINK_VIBRATOR = GRIP_TAP_LINK_VIBRATOR & 0xFFF7;
-		else 
-			GRIP_TAP_LINK_VIBRATOR = GRIP_TAP_LINK_VIBRATOR | 0x8;
-	}else{
-		/* 0x1a Bit 6 overwrite */
-		if(val == 0)
-			GRIP_TAP_LINK_VIBRATOR = GRIP_TAP_LINK_VIBRATOR & 0xFFDF;
-		else 
-			GRIP_TAP_LINK_VIBRATOR = GRIP_TAP_LINK_VIBRATOR | 0x20;
-	}
-	write_register(snt8100fsr_g, REGISTER_TIRGGER_LINK, &GRIP_TAP_LINK_VIBRATOR);	
-	PRINT_INFO("addr[0x%x] = 0x%x", REGISTER_TIRGGER_LINK, GRIP_TAP_LINK_VIBRATOR);
-	mutex_unlock(&snt8100fsr_g->ap_lock);		
+	
+	if(Grip_Check_FW_Status()){return;}
+	
+	/* ASUS BSP Clay: setting vibrator trig1 & trig2 register for different tap modes +++ */
+	gripVibratorSetting(val, tap_id);
+	/* ASUS BSP--- */
+	mutex_unlock(&snt8100fsr_g->ap_lock);
 }
 
 void grip_tap1_vibrator_enable_func(int val){
@@ -1370,19 +1482,18 @@ void grip_tap1_vibrator_enable_func(int val){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP1_VIB_EN = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	/* 0x1a Bit 1 overwrite */
 	if(val == 0)
-		GRIP_TAP_LINK_VIBRATOR = GRIP_TAP_LINK_VIBRATOR & 0xFFFE;
+		G_grip_tap_vib1_reg = G_grip_tap_vib1_reg & 0xFFFE;
 	else 
-		GRIP_TAP_LINK_VIBRATOR = GRIP_TAP_LINK_VIBRATOR | 0x1;
+		G_grip_tap_vib1_reg = G_grip_tap_vib1_reg | 0x1;
 	
-	write_register(snt8100fsr_g, REGISTER_TIRGGER_LINK, &GRIP_TAP_LINK_VIBRATOR);	
-	PRINT_INFO("addr[0x%x] = 0x%x", REGISTER_TIRGGER_LINK, GRIP_TAP_LINK_VIBRATOR);
+	write_register(snt8100fsr_g, REGISTER_TIRGGER_LINK1, &G_grip_tap_vib1_reg);	
+	PRINT_INFO("addr[0x%x] = 0x%x", REGISTER_TIRGGER_LINK1, G_grip_tap_vib1_reg);
 	mutex_unlock(&snt8100fsr_g->ap_lock);		
 }
 
@@ -1394,19 +1505,18 @@ void grip_tap2_vibrator_enable_func(int val){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP2_VIB_EN = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	/* 0x1a Bit 2 overwrite */
 	if(val == 0)
-		GRIP_TAP_LINK_VIBRATOR = GRIP_TAP_LINK_VIBRATOR & 0xFFFD;
+		G_grip_tap_vib1_reg = G_grip_tap_vib1_reg & 0xFFFD;
 	else 
-		GRIP_TAP_LINK_VIBRATOR = GRIP_TAP_LINK_VIBRATOR | 0x2;
+		G_grip_tap_vib1_reg = G_grip_tap_vib1_reg | 0x2;
 	
-	write_register(snt8100fsr_g, REGISTER_TIRGGER_LINK, &GRIP_TAP_LINK_VIBRATOR);
-	PRINT_INFO("addr[0x%x] = 0x%x", REGISTER_TIRGGER_LINK, GRIP_TAP_LINK_VIBRATOR);
+	write_register(snt8100fsr_g, REGISTER_TIRGGER_LINK1, &G_grip_tap_vib1_reg);
+	PRINT_INFO("addr[0x%x] = 0x%x", REGISTER_TIRGGER_LINK1, G_grip_tap_vib1_reg);
 	/*
 	if(val == 0){
 		if(g_ASUS_hwID < ZS660KL_ER2)
@@ -1415,7 +1525,7 @@ void grip_tap2_vibrator_enable_func(int val){
 			set_tap_gesture(2, val, 1);
 	}else{
 		if(g_ASUS_hwID < ZS660KL_ER2)
-			write_register(snt8100fsr_g, REGISTER_TIRGGER_LINK, &GRIP_TAP_LINK_VIBRATOR);
+			write_register(snt8100fsr_g, REGISTER_TIRGGER_LINK, &G_grip_tap_vib1_reg);
 		else
 			set_tap_gesture(2, TAP2_BIT1, 1);
 	}
@@ -1435,10 +1545,9 @@ void grip_tap1_finger_reseting_enable_func(int val){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP1_REST_EN = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	if(val == 0){
 		set_tap_gesture(0, TAP0_BIT4, 4);
@@ -1458,10 +1567,9 @@ void grip_tap2_finger_reseting_enable_func(int val){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP2_REST_EN = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	if(val == 0){
 		set_tap_gesture(1, TAP1_BIT4, 4);
@@ -1515,10 +1623,9 @@ void grip_squeeze_enable_func(int sq_id, int val, uint16_t* reg){
 	
 	/* when G_EN=0 which means that all gestures close, don't wakeup chip and do setting */
 	if(grip_status_g->G_EN == 1){
-		if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-			mutex_unlock(&snt8100fsr_g->ap_lock);
-			return;
-		}
+		
+		if(Grip_Check_FW_Status()){return;}
+		
 		Wait_Wake_For_RegW();
 		val = val << 15;
 		* reg = (val & 0x8000) | (* reg & 0x7FFF);
@@ -1560,10 +1667,9 @@ void grip_squeeze_force_func(int sq_id, int val, uint16_t* reg){
 	PRINT_INFO("val = %d", val);
 	
 	grip_status_g->G_SQUEEZE_FORCE[sq_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = (val & 0x00FF) | (*reg & 0xFF00);
 	set_sq_gesture(sq_id, * reg, 0);
@@ -1598,10 +1704,9 @@ void grip_squeeze_short_dur_func(int sq_id, int val, uint16_t* reg){
 	PRINT_INFO("val = %d", val);
 	
 	grip_status_g->G_SQUEEZE_SHORT[sq_id]= val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = ((val/20) << 8) | (*reg & 0x00FF);
 	set_sq_gesture(sq_id, *reg, 5);
@@ -1651,10 +1756,9 @@ void grip_squeeze_long_dur_func(int sq_id, int val, uint16_t* reg){
 		}else
 			G_Skip_Sq2_Long = 0;
 	}
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = (val/20) | (*reg & 0xFF00);
 	set_sq_gesture(sq_id, *reg, 5);
@@ -1687,10 +1791,9 @@ void grip_squeeze_up_rate_func(int sq_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SQUEEZE_UP_RATE[sq_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = val<<8  | (*reg & 0x00FF);
 	set_sq_gesture(sq_id, *reg, 6);
@@ -1723,10 +1826,9 @@ void grip_squeeze_up_total_func(int sq_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SQUEEZE_UP_TOTAL[sq_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = val  | (*reg & 0xFF00);
 	set_sq_gesture(sq_id, *reg, 6);
@@ -1758,10 +1860,9 @@ void grip_squeeze_drop_rate_func(int sq_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SQUEEZE_DROP_RATE[sq_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = val<<8  | (*reg & 0x00FF);
 	set_sq_gesture(sq_id, *reg, 7);
@@ -1793,10 +1894,9 @@ void grip_squeeze_drop_total_func(int sq_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SQUEEZE_DROP_TOTAL[sq_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = val  | (*reg & 0xFF00);
 	set_sq_gesture(sq_id, *reg, 7);
@@ -1858,10 +1958,9 @@ void grip_slide_enable_func(int slide_id, int val, uint16_t* reg){
 	
 	/* when G_EN=0 which means that all gestures close, don't wakeup chip and do setting */
 	if(grip_status_g->G_EN == 1){		
-		if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-			mutex_unlock(&snt8100fsr_g->ap_lock);
-			return;
-		}
+		
+		if(Grip_Check_FW_Status()){return;}
+		
 		Wait_Wake_For_RegW();
 		val = val << 15;
 		* reg = (val & 0x8000) | (* reg & 0x7FFF);
@@ -1900,10 +1999,9 @@ void grip_slide_dist_func(int slide_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SLIDE_DIST[slide_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	val = val << 8;
 	*reg = (val & 0xFF00) | (*reg & 0x00FF);
@@ -1935,10 +2033,9 @@ void grip_slide_force_func(int slide_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SLIDE_FORCE[slide_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = (val & 0x00FF) | (*reg & 0xFF00);
 	set_slide_gesture(slide_id, *reg, 3);
@@ -1969,10 +2066,9 @@ void grip_slide_2nd_dist_func(int slide_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SLIDE_2ND_DIST[slide_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = (val & 0x00FF) | (*reg & 0xFF00);
 	set_slide_gesture(slide_id, *reg, 4);
@@ -2003,10 +2099,9 @@ void grip_slide_vibrator_enable_func(int slide_id, int val){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SLIDE_VIB_EN[slide_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	PRINT_INFO("SLIDE1 Do nothing");
 	mutex_unlock(&snt8100fsr_g->ap_lock);	
 }
@@ -2034,10 +2129,9 @@ void grip_slide_min_position_func(int slide_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SLIDE_MIN_POS[slide_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = val;
 	set_slide_gesture(slide_id, *reg, 1);
@@ -2068,10 +2162,9 @@ void grip_slide_max_position_func(int slide_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SLIDE_MAX_POS[slide_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = val;
 	set_slide_gesture(slide_id, *reg, 2);
@@ -2130,10 +2223,9 @@ void grip_swipe_enable_func(int swipe_id, int val, uint16_t* reg){
 	
 	/* when G_EN=0 which means that all gestures close, don't wakeup chip and do setting */
 	if(grip_status_g->G_EN == 1){
-		if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-			mutex_unlock(&snt8100fsr_g->ap_lock);
-			return;
-		}
+		
+		if(Grip_Check_FW_Status()){return;}
+		
 		Wait_Wake_For_RegW();
 		val = val << 15;
 		* reg = (val & 0x8000) | (* reg & 0x7FFF);
@@ -2173,10 +2265,9 @@ void grip_swipe_velocity_func(int swipe_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SWIPE_VELOCITY[swipe_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	* reg = (val & 0x00FF) | (* reg & 0xFF00);
 	set_swipe_gesture(swipe_id, * reg, 0);
@@ -2207,10 +2298,9 @@ void grip_swipe_len_func(int swipe_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SWIPE_LEN[swipe_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = val;
 	set_swipe_gesture(swipe_id, *reg, 3);
@@ -2240,10 +2330,9 @@ void grip_swipe_min_position_func(int swipe_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SWIPE_MIN_POS[swipe_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = val;
 	set_swipe_gesture(swipe_id, *reg, 1);
@@ -2272,10 +2361,9 @@ void grip_swipe_max_position_func(int swipe_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SWIPE_MAX_POS[swipe_id] = val;
-	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){
-		mutex_unlock(&snt8100fsr_g->ap_lock);
-		return;
-	}
+	
+	if(Grip_Check_FW_Status()){return;}
+	
 	Wait_Wake_For_RegW();
 	*reg = val;
 	set_swipe_gesture(swipe_id, *reg, 2);
@@ -2310,9 +2398,10 @@ static void Grip_ReEnable_Squeeze_Check(void){
 
 static void Grip_K_data_recovery(void){
 	uint16_t K_data = 0;
-	if(Grip_B1_F_value == 0 || Grip_B2_F_value == 0){
-	  	ASUSEvtlog("[Grip] No Bar1/Bar2 K data, apply Golden!");
+	if(Grip_B1_F_value == 100 || Grip_B2_F_value == 50){
+	  	PRINT_INFO("Bar1/Bar2 is default data, apply golden!");
 		Grip_Apply_Golden_K();
+		Read_Grip_K_data();
 	}else{
 		K_data =(Grip_B1_F_value << 8) | Grip_B0_F_value ;
 		PRINT_INFO("Grip recovery K data, 0x%x", K_data);
@@ -2326,33 +2415,32 @@ void grip_dump_status_func(struct work_struct *work){
 	int sq_num=2, tap_num=4, swipe_num=2, slide_num=2;
 	int need_en=0;
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("Reset check: framework setting recovery");
-
-	PRINT_INFO("Grip Status: EN:%d, RAW_EN:%d, DPC_EN:%d",
+	PRINT_INFO("framework setting recovery");
+	PRINT_INFO("EN:%d, RAW_EN:%d, DPC_EN:%d",
 		grip_status_g->G_EN, grip_status_g->G_RAW_EN, 
 		grip_status_g->G_DPC_STATUS);
 	for(count=0;count < sq_num;count++){
-		PRINT_INFO("Grip Status: SQ[%d], EN:%d, Force:%d, Short:%d, Long:%d",
+		PRINT_INFO("SQ[%d], EN:%d, Force:%d, Short:%d, Long:%d",
 			count, grip_status_g->G_SQUEEZE_EN[count], grip_status_g->G_SQUEEZE_FORCE[count], 
 			grip_status_g->G_SQUEEZE_SHORT[count], grip_status_g->G_SQUEEZE_LONG[count]);
 	}
 	for(count=0;count < tap_num;count++){
-		PRINT_INFO("Grip Status: TAP[%d], EN:%d, Force:%d, min_pos:%d, max_pos:%d",
+		PRINT_INFO("TAP[%d], EN:%d, Force:%d, min_pos:%d, max_pos:%d",
 			count, grip_status_g->G_TAP_EN[count], grip_status_g->G_TAP_FORCE[count], 
 			grip_status_g->G_TAP_MIN_POS[count], grip_status_g->G_TAP_MAX_POS[count]);
 		
-		PRINT_INFO("Grip Status: slope_window:%d, slope_tap:%d, slope_release:%d, delta_tap:%d, delta_release:%d",
+		PRINT_INFO("slope_window:%d, slope_tap:%d, slope_release:%d, delta_tap:%d, delta_release:%d",
 			grip_status_g->G_TAP_SLOPE_WINDOW[count],
 			grip_status_g->G_TAP_SLOPE_TAP_FORCE[count], grip_status_g->G_TAP_SLOPE_RELEASE_FORCE[count], 
 			grip_status_g->G_TAP_DELTA_TAP_FORCE[count], grip_status_g->G_TAP_DELTA_RELEASE_FORCE[count]);
 	}
 	for(count=0;count < slide_num;count++){
-		PRINT_INFO("Grip Status: SLIDE[%d], EN:%d, DIST:%d, Force:%d",
+		PRINT_INFO("SLIDE[%d], EN:%d, DIST:%d, Force:%d",
 			count, grip_status_g->G_SLIDE_EN[count], grip_status_g->G_SLIDE_DIST[count], 
 			grip_status_g->G_SLIDE_FORCE[count]);
 	}
 	for(count=0;count < swipe_num;count++){
-		PRINT_INFO("Grip Status: SWIPE[%d], EN:%d, Velocity:%d, LEN:%d",
+		PRINT_INFO("SWIPE[%d], EN:%d, Velocity:%d, LEN:%d",
 			count, grip_status_g->G_SWIPE_EN[count], grip_status_g->G_SWIPE_VELOCITY[count], 
 			grip_status_g->G_SWIPE_LEN[count]);
 	}
@@ -2467,8 +2555,6 @@ void grip_dump_status_func(struct work_struct *work){
 		grip_status_g->G_EN=0;
 	}
 	Into_DeepSleep_fun();
-	//PRINT_INFO("Enable gamma vib");
-	//dw7914_enable_trigger2(1, 1);
 }
 
 void Power_Control(int en){
@@ -2482,9 +2568,16 @@ void Power_Control(int en){
 		msleep(50);
 	}else if(en == 1){
 		Snt_Power_State = 1;
-		PRINT_INFO("Close gamma vib");
-		/* [TODO] undefined func */
-		//dw7914_enable_trigger2(1, 0);
+		//disable vibrator trig pin
+		if(aw8697_trig_control(1, 0)==0)
+			PRINT_INFO("Disable vib trig1");
+		else
+			PRINT_INFO("Failed to disable vib trig1");
+		if(aw8697_trig_control(2, 0)==0)
+			PRINT_INFO("Disable vib trig2");
+		else
+			PRINT_INFO("Failed to disable vib trig2");
+		
 		PRINT_INFO("Set pinctl: RST down");
 		snt_set_pinctrl(snt8100fsr_g->dev, GRIP_RST_OFF);
 		msleep(50);
@@ -2814,7 +2907,11 @@ static void Grip_Apply_Golden_K(void){
 	int ret=0;
 	uint16_t Golden_K = 0;
 	G_Golden_K_flag = 1;
-	Golden_K = Grip_Golden;
+	if(g_ASUS_hwID < HW_REV_MP){
+		Golden_K = Grip_Golden;
+	}else{
+		Golden_K = Grip_Golden_MP;
+	}
 	PRINT_INFO("Grip Apply Golden K, 0x%x", Golden_K);
 	ret = write_register(snt8100fsr_g, Grip_Golden_addr, &Golden_K);
 	if (ret) {
@@ -2861,8 +2958,6 @@ static void GripK_magnification(){
 /*************** Golden K related func --- *******************/
 
 /*************** ASUS BSP Clay: proc file +++ *******************/
-extern int grip_snt8155_regulator_disable(void);
-extern int grip_snt8155_regulator_enable(void);
 /*+++BSP Clay proc asusGripDebug Interface+++*/
 static int g_debugMode=0;
 int asusGripDebug_proc_read(struct seq_file *buf, void *v)
@@ -2878,21 +2973,39 @@ int asusGripDebug_proc_open(struct inode *inode, struct  file *file)
 ssize_t asusGripDebug_proc_write(struct file *filp, const char __user *buff,
 		size_t len, loff_t *data)
 {
-	int val;
-	char messages[256];
+	int count=0, val[2] = { -1, -1};
+	char *token = (char *) kmalloc(sizeof(char), GFP_KERNEL);
+	char *s = (char *) kmalloc(sizeof(char), GFP_KERNEL);
+	
+	Wait_Wake_For_RegW();
 	if (len > 256) {
 		len = 256;
 	}
 	
-	if (copy_from_user(messages, buff, len)) {
+	if (copy_from_user(s, buff, len)) {
 		return -EFAULT;
 	}
-	val = (int)simple_strtol(messages, NULL, 10);
-	if(val == 0){
-		grip_snt8155_regulator_disable();
-	}else if(val == 1){
-		grip_snt8155_regulator_enable();
+	//strlcpy(s, messages, sizeof(len));
+
+	do {
+		token = strsep(&s, " ");
+		if(token!= NULL)
+			val[count] = (int)simple_strtol(token, NULL, 10);
+		else
+			break;
+		count++;
+	}while(token != NULL);
+
+	if(count ==2){
+		PRINT_INFO("val=%d, %d", val[0], val[1]);
+	}else{
+		PRINT_INFO("count = %d, Do nothing!", count);
 	}
+	
+	if(token != NULL)
+		kfree(token);
+	if(s != NULL)
+		kfree(s);
 	return len;
 }
 void create_asusGripDebug_proc_file(void)
@@ -3097,6 +3210,17 @@ static ssize_t Grip_ReadK_proc_write(struct file *filp, const char __user *buff,
 		return -EFAULT;
 	}
 	val = (int)simple_strtol(messages, NULL, 10);
+
+	if(aw8697_trig_control(1, 1)==0)
+		PRINT_INFO("Enable vib trig1");
+	else
+		PRINT_INFO("Failed to enable vib trig1");
+	
+	if(aw8697_trig_control(2, 1)==0)
+		PRINT_INFO("Enable vib trig2");
+	else
+		PRINT_INFO("Failed to enable vib trig2");
+	
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	Grip_Driver_IRQ_EN(1);
 	Wait_Wake_For_RegW();
@@ -3171,6 +3295,17 @@ static ssize_t Grip_Apply_GoldenK_proc_write(struct file *filp, const char __use
 		return -1;
 	}
 	val = (int)simple_strtol(messages, NULL, 10);
+
+	if(aw8697_trig_control(1, 1)==0)
+		PRINT_INFO("Enable vib trig1");
+	else
+		PRINT_INFO("Failed to enable vib trig1");
+	
+	if(aw8697_trig_control(2, 1)==0)
+		PRINT_INFO("Enable vib trig2");
+	else
+		PRINT_INFO("Failed to enable vib trig2");
+	
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
 	if(val == 1){
 		Grip_Driver_IRQ_EN(1);
@@ -7729,9 +7864,12 @@ static ssize_t Grip_set_power_proc_write(struct file *filp, const char __user *b
 	}
 	val = (int)simple_strtol(messages, NULL, 10);
 	
-	DPC_write_func(0);
-	Into_DeepSleep_fun();
-	write_register(snt8100fsr_g, Grip_Golden_addr, &val);
+	if(val == 0 && Snt_Power_State == 1){
+		Grip_Driver_IRQ_EN(1);
+		Wait_Wake_For_RegW();
+	}
+	Power_Control(val);
+	PRINT_INFO("set power = %d", val);
 	return len;
 }
 
