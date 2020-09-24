@@ -462,6 +462,7 @@ struct smb_charger {
 	struct regulator	*dpdm_reg;
 #ifdef ASUS_ZS661KS_PROJECT
 	struct regulator	*dpdm2_reg;// This is added for USB2 controller
+	struct regulator	*pm8150l_bob_reg;// BOB for audio
 #endif
 	/* votables */
 	struct votable		*dc_suspend_votable;
@@ -540,6 +541,7 @@ struct smb_charger {
 	struct delayed_work asus_call_rt_reset_work;
 	struct delayed_work asus_30W_Dual_chg_work;
 	struct delayed_work asus_set_usb_extcon_work;
+	struct delayed_work	asus_check_vbus_work;//WA for aohai adapter
 #endif
 	/* asus work --- */
 

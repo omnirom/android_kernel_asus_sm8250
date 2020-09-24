@@ -64,8 +64,6 @@ static int HVDCP_FLAG = 0;
 static int UFP_FLAG = 0;
 static int LEGACY_CABLE_FLAG = 1;
 static int NXP_FLAG = 0;
-bool side_pps_flag = 0;
-bool btm_pps_flag = 0;
 static volatile bool asus_flow_processing = 0;
 int asus_CHG_TYPE = 0;
 int g_adapter_id_vadc = 0;
@@ -1198,6 +1196,9 @@ void smblib_hvdcp_detect_enable(struct smb_charger *chg, bool enable)
 {
 	int rc;
 	u8 mask;
+
+	CHG_DBG("Skip smblib_hvdcp_detect_enable() for aohai adapter WA");
+	return;//WA for aohai adapter
 
 	mask = HVDCP_AUTH_ALG_EN_CFG_BIT | HVDCP_EN_BIT;
 	rc = smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG, mask,
@@ -2352,12 +2353,8 @@ int asus_get_batt_status (void)
 			return NORMAL;
 	}
 
-	if (NXP_FLAG) {
-		if (rt_chg_check_asus_vid() || PE_check_asus_vid())
-			return NXP;
-		else
-			return QC_PLUS;
-	}
+	if (NXP_FLAG)
+		return NXP;
 	if (HVDCP_FLAG == 3)
 		return QC_PLUS;
 	else if ((ASUS_ADAPTER_ID == OTHERS || ASUS_ADAPTER_ID == PB) && UFP_FLAG == 3 && !LEGACY_CABLE_FLAG)
@@ -2709,6 +2706,7 @@ int smblib_get_prop_batt_health(struct smb_charger *chg,
 		rc = smblib_get_prop_from_bms(chg,
 				POWER_SUPPLY_PROP_VOLTAGE_NOW, &pval);
 		if (!rc) {
+#if 0
 			/*
 			 * If Vbatt is within 40mV above Vfloat, then don't
 			 * treat it as overvoltage.
@@ -2720,6 +2718,12 @@ int smblib_get_prop_batt_health(struct smb_charger *chg,
 						pval.intval, effective_fv_uv);
 				goto done;
 			}
+#else
+			val->intval = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
+			smblib_err(chg, "battery over-voltage vbat_fg = %duV, fv = %duV\n",
+					pval.intval, effective_fv_uv);
+			goto done;
+#endif
 		}
 	}
 
@@ -4794,7 +4798,6 @@ int smblib_set_prop_pd_current_max(struct smb_charger *chg,
 {
 	int rc, icl;
 
-	
 	//[+++]Set the Station as Power Bank when the PD current is 1.21 A
 	if (ASUS_POGO_ID == STATION && (val->intval == 1210000)) {
 		CHG_DBG("Station is in PB mode\n");
@@ -5219,8 +5222,8 @@ int smblib_set_prop_pd_voltage_max(struct smb_charger *chg,
 		val->intval, chg->voltage_min_uv);
 
 	max_uv = max(val->intval, chg->voltage_min_uv);
-	if (chg->voltage_max_uv == max_uv)
-		return 0;
+//	if (chg->voltage_max_uv == max_uv)
+//		return 0;
 
 	rc = smblib_set_usb_pd_fsw(chg, max_uv);
 	if (rc < 0) {
@@ -5254,11 +5257,6 @@ int smblib_set_prop_pd_active(struct smb_charger *chg,
 
 	CHG_DBG("chg->pd_active : %d\r\n", val->intval);
 	chg->pd_active = val->intval;
-
-	if (chg->pd_active == POWER_SUPPLY_PD_PPS_ACTIVE)
-		side_pps_flag = 1;
-	else
-		side_pps_flag = 0;
 
 	//[+++]By default, APSD will be disabled for pd_active = 1(No matter VBUS is 0 or 1)
 	//This will cause APSD UNKNOWN for BTM charger plug-in
@@ -5344,12 +5342,6 @@ int smblib_set_prop_pd2_active(struct smb_charger *chg,
 			      const union power_supply_propval *val)
 {
 	chg->pd2_active = val->intval;
-
-	if (chg->pd2_active == POWER_SUPPLY_PD_PPS_ACTIVE)
-		btm_pps_flag = 1;
-	else
-		btm_pps_flag = 0;
-
 	//[+++]WA for 45W adapter. Disable BC 1.2 if the port is PD and has VBUS HIGH
 	if (chg->pd2_active && !gpio_get_value_cansleep(global_gpio->BTM_OVP_ACOK)) {
 		CHG_DBG("disable BC 1.2 for PD2_ACTIVE");
@@ -5915,6 +5907,7 @@ void asus_typec_removal_function(struct smb_charger *chg)
 	cancel_delayed_work(&chg->asus_slow_insertion_work);
 	cancel_delayed_work(&chg->asus_set_usb_extcon_work);
 	cancel_delayed_work(&chg->asus_write_mux_setting_3);
+	cancel_delayed_work(&chg->asus_check_vbus_work);//WA for aohai adapter
 	//ASUS BSP : Add for battery health upgrade +++
 
 	if (g_fgDev != NULL) {
@@ -6063,6 +6056,7 @@ void smblib_asus_monitor_start(struct smb_charger *chg, int time)
 	schedule_delayed_work(&chg->asus_min_monitor_work, msecs_to_jiffies(time));
 
 	schedule_delayed_work(&chg->asus_enable_inov_work, msecs_to_jiffies(60000));
+	schedule_delayed_work(&chg->asus_check_vbus_work, msecs_to_jiffies(60000));//WA for aohai adapter
 }
 
 void pca_jeita_stop_pmic_notifier(int stage)
@@ -6506,10 +6500,7 @@ bool jeita_rule(void)
 
 	if (smartchg_slow_flag) {
 		FCC_uA = 2000000;
-		rc = smblib_write(smbchg_dev, CHGR_FAST_CHARGE_CURRENT_CFG_REG, 0x28);
-		if (rc < 0) {
-			CHG_DBG_E("Couldn't set default CHGR_FAST_CHARGE_CURRENT_CFG_REG rc=%d\n", rc);
-		}
+		CHG_DBG("slow charging is enabled, set FCC to 2A\n");
 	}
 
 	Total_FCC_Value = FCC_uA;	//Add the interface for charging debug apk
@@ -6706,7 +6697,7 @@ void asus_slow_insertion_work(struct work_struct *work)
 }*/
 //[---]WA for BTM_500mA issue
 
-#define RT_RESET_PATH	"/sys/devices/platform/soc/c84000.i2c/i2c-7/7-004e/tcpc/type_c_port0/pd_test"
+#define RT_RESET_PATH	"/sys/devices/platform/soc/884000.i2c/i2c-6/6-004e/tcpc/type_c_port0/pd_test"
 void asus_call_rt_reset_work(struct work_struct *work)
 {
 	struct file *fp = NULL;
@@ -6744,6 +6735,8 @@ void asus_chg_flow_work(struct work_struct *work)
 	u8 legacy_cable_reg = TYPEC_LEGACY_CABLE_STATUS_BIT;
 	bool btm_ovp_stats;
 	bool pogo_ovp_stats;
+	bool btm_pca_vid;
+	bool side_pca_vid;
 	u8 ICL_reg = 0;
 
 	if (!asus_get_prop_usb_present(smbchg_dev)) {
@@ -6787,11 +6780,13 @@ void asus_chg_flow_work(struct work_struct *work)
 		CHG_DBG("Retry %s detected\n", apsd_result->name);
 	}
 
-	if (side_pps_flag && btm_pps_flag)
+	side_pca_vid = PE_check_asus_vid();
+	btm_pca_vid = rt_chg_check_asus_vid();
+	if (side_pca_vid && btm_pca_vid)
 		NXP_FLAG = NXP_BOTH;
-	else if (side_pps_flag)
+	else if (side_pca_vid && !gpio_get_value_cansleep(global_gpio->POGO_OVP_ACOK))
 		NXP_FLAG = NXP_SIDE;
-	else if (btm_pps_flag)
+	else if (btm_pca_vid && !gpio_get_value_cansleep(global_gpio->BTM_OVP_ACOK))
 		NXP_FLAG = NXP_BTM;
 	else
 		NXP_FLAG = NXP_NONE;
@@ -7238,6 +7233,14 @@ void asus_adapter_adc_work(struct work_struct *work)
 	bool btm_ovp_stats = gpio_get_value_cansleep(global_gpio->BTM_OVP_ACOK);
 
 	if (!asus_get_prop_usb_present(smbchg_dev)) {
+		// ASUS BSP : Pull low ADC_SW_EN
+		rc = gpio_direction_output(global_gpio->ADC_SW_EN, 0);
+		if (rc) {
+			CHG_DBG_E("Failed to pull low ADC_SW_EN\n");
+		} else {
+			CHG_DBG("Succeed to pull low ADC_SW_EN\n");
+		}
+		
 		asus_typec_removal_function(smbchg_dev);
 		return;
 	}
@@ -7480,11 +7483,21 @@ void asus_insertion_initial_settings(struct smb_charger *chg)
 	rc = smblib_write(smbchg_dev, HVDCP_PULSE_COUNT_MAX_REG, 0x54);
 	if (rc < 0)
 		CHG_DBG_E("Failed to set HVDCP_PULSE_COUNT_MAX_REG\n");
+
+//[+++]WA for aohai adapter
+	rc = smblib_write(chg, USBIN_OPTIONS_1_CFG_REG, 0x1E);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't set USBIN_OPTIONS_1_CFG_REG to 0x1E rc=%d\n", rc);
+	}
+//[---]WA for aohai adapter
 }
 //ASUS BSP : Add ASUS Adapter Detecting ---
 
 void asus_set_flow_flag_work(struct work_struct *work)
 {
+	bool btm_pca_vid;
+	bool side_pca_vid;
+
 	//[+++]Check the VBUS status againg before runing the work
 	if (!asus_get_prop_usb_present(smbchg_dev)) {
 		CHG_DBG_E("Try to run, but VBUS_IN is low\n");
@@ -7495,11 +7508,13 @@ void asus_set_flow_flag_work(struct work_struct *work)
 	if (asus_flow_processing)
 		asus_adapter_detecting_flag = 1;
 
-	if (side_pps_flag && btm_pps_flag)
+	side_pca_vid = PE_check_asus_vid();
+	btm_pca_vid = rt_chg_check_asus_vid();
+	if (side_pca_vid && btm_pca_vid)
 		NXP_FLAG = NXP_BOTH;
-	else if (side_pps_flag)
+	else if (side_pca_vid && !gpio_get_value_cansleep(global_gpio->POGO_OVP_ACOK))
 		NXP_FLAG = NXP_SIDE;
-	else if (btm_pps_flag)
+	else if (btm_pca_vid && !gpio_get_value_cansleep(global_gpio->BTM_OVP_ACOK))
 		NXP_FLAG = NXP_BTM;
 	else
 		NXP_FLAG = NXP_NONE;
@@ -7800,6 +7815,33 @@ void asus_set_usb_extcon_work(struct work_struct *work)
 	extcon_set_state_sync(smbchg_dev->extcon, EXTCON_USB, true);
 }
 
+int asus_set_pm8150l_pwm(bool enable)
+{
+	int rc;
+	
+	if (!smbchg_dev->pm8150l_bob_reg && of_get_property(smbchg_dev->dev->of_node,
+				"pm8150l_bob-supply", NULL)) {
+		smbchg_dev->pm8150l_bob_reg = devm_regulator_get(smbchg_dev->dev, "pm8150l_bob");
+		if (IS_ERR(smbchg_dev->pm8150l_bob_reg)) {
+			rc = PTR_ERR(smbchg_dev->pm8150l_bob_reg);
+			CHG_DBG("Couldn't get pm8150l_bob_reg regulator rc=%d\n", rc);
+			smbchg_dev->pm8150l_bob_reg = NULL;
+			return rc;
+		}
+	}
+	
+	if (enable) {
+		CHG_DBG("set pm8150l BOB to PWM mode");
+		regulator_set_load(smbchg_dev->pm8150l_bob_reg, 2000000);
+	} else {
+		CHG_DBG("set pm8150l BOB to AUTO mode");
+		regulator_set_load(smbchg_dev->pm8150l_bob_reg, 0);
+	}
+	
+	return rc;
+}
+EXPORT_SYMBOL(asus_set_pm8150l_pwm);
+
 //ASUS BSP : Add for PD PDO_select +++
 #ifdef CONFIG_ASUS_PD_CHARGER
 #define ASUS_PD_INPUT_VOL_CFG_9V 9000000	// 9V
@@ -7945,6 +7987,47 @@ void asus_enable_inov_work(struct work_struct *work)
 }
 //ASUS BSP : Add for enable INOV work ---
 
+// WA for aohai adapter +++
+void asus_check_vbus_work(struct work_struct *work)
+{
+	int rc;
+	union power_supply_propval voltage_val;
+	u8 stat;
+	int i;
+
+	smblib_get_prop_usb_voltage_now(smbchg_dev, &voltage_val);
+
+	rc = smblib_read(smbchg_dev, APSD_RESULT_STATUS_REG, &stat);
+	if (rc < 0)
+		CHG_DBG_E("Couldn't read APSD_RESULT_STATUS rc=%d\n", rc);
+
+	CHG_DBG("input_voltage = %d, 0x1308 = 0x%x", voltage_val.intval, stat);
+	if((voltage_val.intval < 8000000) && stat == 0x48){
+		for(i=0; i<20; i++){
+			rc = smblib_write(smbchg_dev, 0x1343, 0x01);
+			if (rc < 0)
+				CHG_DBG_E("Couldn't set 0x1362 to 0x3E rc=%d\n", rc);
+
+			msleep(100);
+		}
+
+		msleep(5000);
+
+		smblib_get_prop_usb_voltage_now(smbchg_dev, &voltage_val);
+
+		if(voltage_val.intval < 5250000){
+			rc = smblib_write(smbchg_dev, 0x1343, 0x10);
+			if (rc < 0)
+				CHG_DBG_E("Couldn't set 0x1343 to 0x10 rc=%d\n", rc);
+		}
+
+		rc = asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_ICL_VOTER, true, 1750000);
+		if (rc < 0)
+			CHG_DBG_E("Failed to set USBIN_CURRENT_LIMIT to 500mA\n");
+	}
+}
+// WA for aohai adapter ---
+
 //[+++]Implement the ASUS SW INOV
 //#define asus_ATM_min	700000; //The min value of ATM is 700mA
 #define asus_ATM_min 0x10 //The min value of ATM is 50mA*16=800mA
@@ -7991,20 +8074,6 @@ void asus_monitor_thermal_management(void) {
 	}	
 }
 //[---]Implement the ASUS SW INOV
-
-//ASUS_BSP LiJen +++ enter shipping mode when poweroff & full & online
-void asus_set_ship_mode_poweroff(void)
-{
-	int bat_capacity;
-	bat_capacity = asus_get_batt_capacity();
-	
-	if(bat_capacity == FULL_CAPACITY && g_fgDev->online_status){
-		CHG_DBG("%d \n",__func__);
-		smblib_masked_write(smbchg_dev, SHIP_MODE_REG, SHIP_MODE_EN_BIT, 1);
-		msleep(3000);
-	}
-}
-//ASUS_BSP LiJen --- enter shipping mode when poweroff & full & online
 
 #define IADP_OVERHEAT_UA	500000
 int smblib_set_prop_thermal_overheat(struct smb_charger *chg,
@@ -8538,7 +8607,7 @@ void smblib_usb_plugin_hard_reset_locked(struct smb_charger *chg)
 	if (!gpio_get_value(global_gpio->POGO_OVP_ACOK) && rt_ufp != 0) {
 		CHG_DBG_E("Set dual_port_once_flag = 1\n");
 		dual_port_once_flag = 1;
-	} else if (gpio_get_value(global_gpio->POGO_OVP_ACOK) && gpio_get_value(global_gpio->BTM_OVP_ACOK)) {
+	} else if (gpio_get_value(global_gpio->POGO_OVP_ACOK) && gpio_get_value(global_gpio->BTM_OVP_ACOK) && rt_ufp == 0) {
 		dual_port_once_flag = 0;
 		CHG_DBG_E("Set dual_port_once_flag = 0\n");
 	}
@@ -8797,7 +8866,7 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 	if (!gpio_get_value(global_gpio->POGO_OVP_ACOK) && rt_ufp != 0) {
 		CHG_DBG_E("Set dual_port_once_flag = 1\n");
 		dual_port_once_flag = 1;
-	} else if (gpio_get_value(global_gpio->POGO_OVP_ACOK) && gpio_get_value(global_gpio->BTM_OVP_ACOK)) {
+	} else if (gpio_get_value(global_gpio->POGO_OVP_ACOK) && gpio_get_value(global_gpio->BTM_OVP_ACOK) && rt_ufp == 0) {
 		dual_port_once_flag = 0;
 		CHG_DBG_E("Set dual_port_once_flag = 0\n");
 	}
@@ -10239,7 +10308,7 @@ int smblib_set_prop_pr_swap_in_progress(struct smb_charger *chg,
 		smblib_err(chg, "Couldn't set exit state cfg rc=%d\n", rc);
 
 	//[+++]BYPASS VSAFE0V for dual port scenario(BTM : charging, SIDE : OTG)
-	if ((ASUS_POGO_ID == NO_INSERT || ASUS_POGO_ID == STATION_1ST_UNLOCK|| ASUS_POGO_ID == STATION_UNLOCK)
+	if ((ASUS_POGO_ID == NO_INSERT || ASUS_POGO_ID == STATION_1ST_UNLOCK|| ASUS_POGO_ID == STATION_UNLOCK || chg->pd_active == 0)
 		&& !gpio_get_value_cansleep(global_gpio->BTM_OVP_ACOK)) {
 		CHG_DBG("BYPASS to check VSAFE0V for dual port scenario\r\n");
 		rc = smblib_masked_write(chg, TYPE_C_EXIT_STATE_CFG_REG,
@@ -11221,6 +11290,7 @@ int smblib_init(struct smb_charger *chg)
 	INIT_DELAYED_WORK(&chg->asus_30W_Dual_chg_work, asus_30W_Dual_chg_work);
 	INIT_DELAYED_WORK(&chg->asus_enable_inov_work, asus_enable_inov_work);
 	INIT_DELAYED_WORK(&chg->asus_set_usb_extcon_work, asus_set_usb_extcon_work);
+	INIT_DELAYED_WORK(&chg->asus_check_vbus_work, asus_check_vbus_work);// WA for aohai adapter
 	alarm_init(&bat_alarm, ALARM_REALTIME, batAlarm_handler);
 	//ASUS BSP : Add the work ---
 
