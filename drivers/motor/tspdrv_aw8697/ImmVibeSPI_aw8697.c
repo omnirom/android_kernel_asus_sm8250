@@ -100,18 +100,19 @@ static int gResample=2;// ivt 12Khz to 24Khz
 //static int gPWM = AW8697_PWM_48K;
 static int gAW_RTP_PWM = AW8697_PWM_24K;
 static int gROG2_RTP_PWM = AW8697_PWM_48K;
+static int gRTP_PWM = 0xf ;
 //Vibrator debug interface
 /*gVibDebugLog: 
  * 0x0000: none
- * 0x0001: irq
- * 0x0002: kernel
- * 0x0004: immersion
- * 0x0008: nForce data
- * 0x0010: store node debug
- * 0x0020: vibratorcontrol debug
- * 0x0100: open vd_clamp limitation
+ * 0x0001: awinic log
+ * 0x0002: immersion log
+ * 0x0004: immersion data
+ * 0x0008: 
+ * 0x0010: 
+ * 0x0020: 
+ * 0x0100: 
  */
-int gVibDebugLog=0;
+int gVibDebugLog=0x0000;
 // /sys/module/tspdrv/parameters/
 module_param(gVibDebugLog, int , 0644);
 MODULE_PARM_DESC(gVibDebugLog, "vib kerenl debug");
@@ -536,7 +537,8 @@ static int aw8697_haptic_softreset(struct aw8697 *aw8697)
 
 static int aw8697_haptic_active(struct aw8697 *aw8697)
 {
-	pr_info("%s enter\n", __func__);
+	if((gVibDebugLog & 0x0001)== 0x0001)
+		pr_info("%s enter\n", __func__);
 
 	aw8697_i2c_write_bits(aw8697, AW8697_REG_SYSCTRL,
 			      AW8697_BIT_SYSCTRL_WORK_MODE_MASK,
@@ -759,7 +761,8 @@ static int aw8697_haptic_stop_delay(struct aw8697 *aw8697)
 
 static int aw8697_haptic_stop(struct aw8697 *aw8697)
 {
-	pr_info("%s enter\n", __func__);
+	if((gVibDebugLog & 0x0001)== 0x0001)
+		pr_info("%s enter\n", __func__);
 
 	aw8697_haptic_play_go(aw8697, false);
 	aw8697_haptic_stop_delay(aw8697);
@@ -848,6 +851,37 @@ static int aw8697_haptic_set_gain(struct aw8697 *aw8697, unsigned char gain)
 
 static int aw8697_haptic_set_pwm(struct aw8697 *aw8697, unsigned char mode)
 {
+	if (gRTP_PWM != mode){
+	unsigned char new = 0;
+	unsigned char old = 0;
+	switch (mode) {
+	case AW8697_PWM_48K:
+		new = 48;
+		break;
+	case AW8697_PWM_24K:
+		new = 24;
+		break;
+	case AW8697_PWM_12K:
+		new = 12;
+		break;
+	}
+	switch (gRTP_PWM) {
+	case AW8697_PWM_48K:
+		old = 48;
+		break;
+	case AW8697_PWM_24K:
+		old = 24;
+		break;
+	case AW8697_PWM_12K:
+		old = 12;
+		break;
+	}
+		pr_info("%s change out pwn %d -> %d kHz\n", __func__, old, new);
+		gRTP_PWM = (int)mode;
+		//pr_info("%s gRTP_PWM = %d \n", __func__, gRTP_PWM);
+	}else
+		return 0;
+
 	switch (mode) {
 	case AW8697_PWM_48K:
 		aw8697_i2c_write_bits(aw8697, AW8697_REG_PWMDBG,
@@ -1456,12 +1490,14 @@ static void aw8697_haptic_upload_lra(struct aw8697 *aw8697, unsigned int flag)
 {
 	switch (flag) {
 	case 1:
-		printk("%s f0_cali_lra=%d\n", __func__, aw8697->f0_calib_data);
+		if((gVibDebugLog & 0x0001)== 0x0001)
+			printk("%s f0_cali_lra=%d\n", __func__, aw8697->f0_calib_data);
 		aw8697_i2c_write(aw8697, AW8697_REG_TRIM_LRA,
 				 (char)aw8697->f0_calib_data);
 		break;
 	case 2:
-		printk("%s rtp_cali_lra=%d\n", __func__, aw8697->lra_calib_data);
+		if((gVibDebugLog & 0x0001)== 0x0001)
+			printk("%s rtp_cali_lra=%d\n", __func__, aw8697->lra_calib_data);
 		aw8697_i2c_write(aw8697, AW8697_REG_TRIM_LRA,
 				 (char)aw8697->lra_calib_data);
 		break;
@@ -1669,7 +1705,7 @@ static void aw8697_op_clean_status(struct aw8697 *aw8697)
 	pr_info("%s enter\n", __func__);
 }
 //ASUS_BSP: load rtp bin for request_firmware() cannot read user space in workqueue
-void aw8697_load_rtp_file(void)
+int aw8697_load_rtp_file(void)
 {
 	const struct firmware *rtp_file;
 	int ret = -1;
@@ -1696,14 +1732,14 @@ void aw8697_load_rtp_file(void)
 		if ( Tc )
 			sprintf(fwName, "%d.bin", aw8697->rtp_file_num);
 		else
-		sprintf(fwName, "%s_%d.bin", rtp_type, aw8697->rtp_file_num);
+			sprintf(fwName, "%s_%d.bin", rtp_type, aw8697->rtp_file_num);
 		ret = request_firmware(&rtp_file,
 		fwName,
 		aw8697->dev);
 	if (ret < 0) {
 		pr_err("%s: failed to read %s\n", __func__, fwName);
 		mutex_unlock(&aw8697->rtp_lock);
-		return;
+		return -1;
 	}
 	#else //ori
 	ret = request_firmware(&rtp_file,
@@ -1723,7 +1759,7 @@ void aw8697_load_rtp_file(void)
 		release_firmware(rtp_file);
 		pr_err("%s: error allocating memory\n", __func__);
 		mutex_unlock(&aw8697->rtp_lock);
-		return;
+		return -1;
 	}
 	
 	if(strcmp(rtp_type, "rog2") == 0) {
@@ -1747,6 +1783,7 @@ void aw8697_load_rtp_file(void)
 
 	mutex_unlock(&aw8697->rtp_lock);
 	release_firmware(rtp_file);
+	return 0;
 }
 //
 
@@ -3357,8 +3394,9 @@ static int aw8697_rtp_play_store_base(struct device *dev,
 
 	aw8697_haptic_set_pwm(aw8697, out_pwm);
 
-	aw8697_load_rtp_file();
-	schedule_delayed_work(&aw8697->rtp_work, msecs_to_jiffies(delay_ms));
+	rc = aw8697_load_rtp_file();
+	if (rc == 0)
+		schedule_delayed_work(&aw8697->rtp_work, msecs_to_jiffies(delay_ms));
 
 	mutex_unlock(&aw8697->lock);
 	return rc;
@@ -4251,6 +4289,7 @@ static ssize_t aw8697_trig_store(struct device *dev,
 	struct led_classdev *cdev = dev_get_drvdata(dev);
 	struct aw8697 *aw8697 = container_of(cdev, struct aw8697, cdev);
 #endif
+
 	unsigned int databuf[6] = { 0 };
 
 	if (sscanf(buf, "%d %d %d %d %d %d",
@@ -4730,6 +4769,7 @@ static void aw8697_interrupt_clear(struct aw8697 *aw8697)
 
 	//pr_info("%s enter\n", __func__);
 	aw8697_i2c_read(aw8697, AW8697_REG_SYSINT, &reg_val);
+if((gVibDebugLog & 0x0001)== 0x0001)
 	pr_info("%s: reg SYSINT=0x%x\n", __func__, reg_val);
 }
 
@@ -4803,12 +4843,14 @@ static irqreturn_t aw8697_irq(int irq, void *data)
 	}
 
 	if (reg_val & AW8697_BIT_SYSINT_FF_AEI) {
-		pr_info("%s: aw8697 rtp fifo almost empty int\n", __func__);
+		if((gVibDebugLog & 0x0001)== 0x0001)
+			pr_info("%s: aw8697 rtp fifo almost empty int\n", __func__);
 		if (aw8697->rtp_init) {
 			while ((!aw8697_haptic_rtp_get_fifo_afs(aw8697)) &&
 			       (aw8697->play_mode == AW8697_HAPTIC_RTP_MODE)) {
 				mutex_lock(&aw8697->rtp_lock);
-				pr_info("%s: aw8697 rtp mode fifo update, cnt=%d\n",__func__, aw8697->rtp_cnt);
+				if((gVibDebugLog & 0x0001)== 0x0001)
+					pr_info("%s: aw8697 rtp mode fifo update, cnt=%d\n",__func__, aw8697->rtp_cnt);
 				if (!aw8697_rtp) {
 					pr_info("%s:aw8697_rtp is null break\n",__func__);
 					mutex_unlock(&aw8697->rtp_lock);
@@ -4870,9 +4912,10 @@ static irqreturn_t aw8697_irq(int irq, void *data)
 		}
 	}
 
-	if (reg_val & AW8697_BIT_SYSINT_FF_AFI)
-		pr_info("%s: aw8697 rtp mode fifo full empty\n", __func__);
-
+	if (reg_val & AW8697_BIT_SYSINT_FF_AFI){
+		if((gVibDebugLog & 0x0001)== 0x0001)
+			pr_info("%s: aw8697 rtp mode fifo full empty\n", __func__);
+	}
 	if (aw8697->play_mode != AW8697_HAPTIC_RTP_MODE)
 		aw8697_haptic_set_rtp_aei(aw8697, false);
 
@@ -5356,7 +5399,7 @@ static VibeStatus aw8697_rtp_update_data(struct aw8697 *aw8697,VibeUInt16 nBuffe
 		DbgOut((DBL_ERROR, "%s aw8697 is NULL \n", __func__));
 		return VIBE_E_FAIL;
 	}
-	if(gVibDebugLog==8)//enable nForceData
+	if((gVibDebugLog & 0x0004)== 0x0004)//enable nForceData
 	{
 		DbgOut((DBL_WARNING, "%s:nBufferSizeInBytes=%d +++\n", __func__, nBufferSizeInBytes));
 	}
@@ -5394,7 +5437,7 @@ static VibeStatus aw8697_rtp_update_data(struct aw8697 *aw8697,VibeUInt16 nBuffe
 		aw8697_i2c_writes(aw8697, AW8697_REG_RTP_DATA,dma_buf_ivt, nBufferSizeInBytes);
 	}
 	mutex_unlock(&aw8697->rtp_lock);
-		if(gVibDebugLog==8)//enable nForceData
+		if((gVibDebugLog & 0x0004) == 0x0004)//enable nForceData
 		{
 			DbgOut((DBL_WARNING, "%s:aw8697 rtp write %d done\n", __func__, nBufferSizeInBytes * resample));
 			for(i=0; i<=nBufferSizeInBytes * resample; i=i+4) {
@@ -5524,6 +5567,12 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_AmpEnable(VibeUInt8 nActuatorIndex)
 
     cancel_delayed_work(&aw8697->gain_work);
 
+//ASUS_BSP: stop and clear fifo 
+		aw8697_haptic_stop(aw8697);
+		aw8697_haptic_set_rtp_aei(aw8697, false);
+		aw8697_interrupt_clear(aw8697);
+
+
     if(result == 0) {
         return VIBE_S_SUCCESS;
     } else {
@@ -5598,7 +5647,8 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_SetSamples(VibeUInt8 nActuatorIndex
 		return VIBE_E_FAIL;
 	} else {
 		//int mode, active;
-		DbgOut((DBL_INFO, "%s:aw8697 enter\n", __func__));
+		if((gVibDebugLog & 0x0002) == 0x0002)
+			DbgOut((DBL_INFO, "%s:aw8697 enter\n", __func__));
 		//DbgOut((DBL_INFO, "%s:aw8697 enter. nActuatorIndex=%d nOutputSignalBitDepth=%d nBufferSizeInBytes=%d \n", __func__ ,nActuatorIndex,nOutputSignalBitDepth,nBufferSizeInBytes));
 	}
 
@@ -5607,7 +5657,7 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_SetSamples(VibeUInt8 nActuatorIndex
         return VIBE_E_FAIL;
     }
 
-    if(gVibDebugLog==4)//enable immersion message
+    if((gVibDebugLog & 0x0004) == 0x0004)//enable immersion message
 		DbgOut((DBL_ERROR, "%s: nActuatorIndex=%d ---\n", __func__, nActuatorIndex));
     return VIBE_S_SUCCESS;
 
