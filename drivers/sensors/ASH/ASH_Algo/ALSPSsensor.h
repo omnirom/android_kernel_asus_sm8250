@@ -49,13 +49,20 @@
 #define PROXIMITY_TURNON_DELAY_TIME	(50)
 
 #define PROXIMITY_POLLING_TIME			(1000)
+
+#ifdef ASUS_ZS661KS_PROJECT
+#define LIGHT_POLLING_TIME			(400)
+#define LIGHT_RETRY_POLLING_TIME			(10)
+#else
 #define LIGHT_POLLING_TIME			(500)
+#endif
 
 /**
  * LIGHT_LOG_THRESHOLD : We print light sensor log 
  * when the current lux value change over 100 lux from the last lux.
  */
 #define LIGHT_LOG_THRESHOLD					(100)
+#define LIGHT_LOG_LOW_LUX_THRESHOLD					(20)
 
 /**
  * @ALSPS_DEFAULT_VALUE : Define the default value for driver data.
@@ -68,7 +75,7 @@
 #define PROXIMITY_THDL_ER_DEFAULT    (134)
 #define PROXIMITY_THDH_ER_DEFAULT    (249)
 #define PROXIMITY_POCKET_ER_DEFAULT       (4073)
-#define PROXIMITY_POCKET_DEFAULT       (4073)
+#define PROXIMITY_POCKET_DEFAULT       (3800)
 #define LIGHT_ER_CALIBRATION_DEFAULT (1526)
 #else
 #define PROXIMITY_INF_ER_DEFAULT     (513)

@@ -1,5 +1,4 @@
 obj-n += HALLsensor.o
-obj-y += ALSPSsensor.o
 obj-n += psensor.o
 obj-n += lsensor.o
 obj-n += ALSPS_FRGBsensor.o
@@ -16,3 +15,9 @@ else
 	DEBFLAGS = -O -g
 endif
 ccflags-y += $(DEBFLAGS)
+
+ifdef CONFIG_MACH_ASUS_ZS661KS
+obj-y += ALSPSsensor_zs661ks.o
+else
+obj-y += ALSPSsensor.o
+endif
