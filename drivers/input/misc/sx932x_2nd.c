@@ -58,6 +58,7 @@
 
 extern int asus_extcon_set_state_sync(struct extcon_dev *edev, int cable_state); //ASUS_BSP
 extern bool g_is_country_code_US;
+extern int g_ASUS_capID;
 static int g_CAP_STATUS_UEVENT = CAP_STATUS_UEVENT_NONE; //ASUS_BSP register cap_satus uevent
 static int g_CAP_STATUS_UEVENT_last = CAP_STATUS_UEVENT_NONE; //ASUS_BSP register cap_satus uevent
 
@@ -780,8 +781,8 @@ static int sx932x_probe(struct i2c_client *client, const struct i2c_device_id *i
 	struct input_dev *input = NULL;
 	struct i2c_adapter *adapter = to_i2c_adapter(client->dev.parent);
 
-	//If country code is US, diable sx932x driver
-	if(g_is_country_code_US){
+	//If g_ASUS_capID=0 means HW is not support. 
+	if(g_ASUS_capID == 0){
 		dev_info(&client->dev, "Disable sx932x_2nd driver\n");
 		return 0;
 	}
@@ -956,7 +957,7 @@ static int sx932x_remove(struct i2c_client *client)
 			pplatData->exit_platform_hw(client);
 		kfree(this->pDevice);
 	}
-	return sx93XX_remove(this);
+	return sx93XX_2nd_remove(this);
 }
 #if 1//def CONFIG_PM
 /*====================================================*/
@@ -964,14 +965,14 @@ static int sx932x_remove(struct i2c_client *client)
 static int sx932x_suspend(struct device *dev)
 {
 	psx93XX_t this = dev_get_drvdata(dev);
-	sx93XX_suspend(this);
+	sx93XX_2nd_suspend(this);
 	return 0;
 }
 /***** Kernel Resume *****/
 static int sx932x_resume(struct device *dev)
 {
 	psx93XX_t this = dev_get_drvdata(dev);
-	sx93XX_resume(this);
+	sx93XX_2nd_resume(this);
 	return 0;
 }
 /*====================================================*/
