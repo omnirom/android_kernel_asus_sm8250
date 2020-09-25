@@ -126,6 +126,7 @@
 #ifdef ASUS_ZS661KS_PROJECT
 extern bool g_is_country_code_EU;
 extern bool g_is_country_code_RU;
+extern bool g_is_country_code_WW;
 #endif //ASUS_ZS661KS_PROJECT
 
 #ifdef ZS670KS
@@ -171,14 +172,42 @@ getname_flags(const char __user *filename, int flags, int *empty)
 
 		if (g_is_country_code_EU){
 			//printk("%s: load build.prop from build_eu.prop",__func__);
-			strncpy(kname, "/vendor/build_eu.prop", EMBEDDED_NAME_MAX);
-			len = 21;
+			if(g_ASUS_prjID == 0){
+				strncpy(kname, "/vendor/build_eu.prop", EMBEDDED_NAME_MAX);
+				len = 21;
+			}else{
+				strncpy(kname, "/vendor/build_eu_elite.prop", EMBEDDED_NAME_MAX);
+				len = 27;
+			}
 		}else if(g_is_country_code_RU){
 			//printk("%s: load build.prop from build_ru.prop",__func__);
 			strncpy(kname, "/vendor/build_ru.prop", EMBEDDED_NAME_MAX);
 			len = 21;
+		}else if(g_is_country_code_WW && g_ASUS_prjID == 1){
+			//printk("%s: load build.prop from build_ru.prop",__func__);
+			strncpy(kname, "/vendor/build_ww_elite.prop", EMBEDDED_NAME_MAX);
+			len = 27;
 		}
-    }
+	}else if (!strncmp(kname, "/odm/etc/build.prop", 19)) {
+		if (g_is_country_code_EU){
+			//printk("%s: load build.prop from build_eu.prop",__func__);
+			if(g_ASUS_prjID == 0){
+				strncpy(kname, "/odm/etc/build_eu.prop", EMBEDDED_NAME_MAX);
+				len = 22;
+			}else{
+				strncpy(kname, "/odm/etc/build_eu_elite.prop", EMBEDDED_NAME_MAX);
+				len = 28;
+			}
+		}else if(g_is_country_code_RU){
+			//printk("%s: load build.prop from build_ru.prop",__func__);
+			strncpy(kname, "/odm/etc/build_ru.prop", EMBEDDED_NAME_MAX);
+			len = 22;
+		}else if(g_is_country_code_WW && g_ASUS_prjID == 1){
+			//printk("%s: load build.prop from build_ru.prop",__func__);
+			strncpy(kname, "/odm/etc/build_ww_elite.prop", EMBEDDED_NAME_MAX);
+			len = 28;
+		}
+	}
 #endif //ASUS_ZS661KS_PROJECT
 
 #ifdef ZS670KS

@@ -435,9 +435,11 @@ static int set_fp_id(char *str)
 __setup("androidboot.id.fp=", set_fp_id);
 
 // ASUS_BSP +++ Add for cap sensor check country code is US
+bool g_is_country_code_WW = false;
 bool g_is_country_code_EU = false;
 bool g_is_country_code_RU = false;
 bool g_is_country_code_US = false;
+EXPORT_SYMBOL(g_is_country_code_WW);
 EXPORT_SYMBOL(g_is_country_code_EU);
 EXPORT_SYMBOL(g_is_country_code_RU);
 EXPORT_SYMBOL(g_is_country_code_US);
@@ -448,7 +450,9 @@ static int check_country_code(char *str)
         g_is_country_code_EU = true;
     } else if ( strcmp("RU", str) == 0 ) {
         g_is_country_code_RU = true;
-    }
+    } else if ( strcmp("WW", str) == 0 ) {
+        g_is_country_code_WW = true;
+	}
 
     if (strcmp("US", str) == 0)
         g_is_country_code_US = true;
@@ -461,6 +465,22 @@ static int check_country_code(char *str)
 }
 __setup("androidboot.country_code=", check_country_code);
 // ASUS_BSP --- Add for cap sensor check country code is US
+// ASUS_BSP +++ Add for cap id
+int g_ASUS_capID = 0;
+EXPORT_SYMBOL(g_ASUS_capID);
+static int set_cap_id(char *str)
+{
+    if ( strcmp("0", str) == 0 ){
+        g_ASUS_capID = 0;
+    }else if ( strcmp("1", str) == 0 ){
+        g_ASUS_capID = 1;
+    }
+
+    printk("g_ASUS_capID = %d\n", g_ASUS_capID);
+    return 0;
+}
+__setup("androidboot.id.cap=", set_cap_id);
+// ASUS_BSP --- Add for cap id
 #endif //ASUS_ZS661KS_PROJECT
 
 #ifdef ZS670KS
