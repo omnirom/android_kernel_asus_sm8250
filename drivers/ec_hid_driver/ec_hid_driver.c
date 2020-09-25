@@ -61,6 +61,9 @@ EXPORT_SYMBOL(ec_set_dp_display);
 struct ec_porta_cc_interface ec_porta_cc;
 EXPORT_SYMBOL(ec_porta_cc);
 
+struct ec_fw_ver_interface ec_fw_ver;
+EXPORT_SYMBOL(ec_fw_ver);
+
 extern void usb_enable_autosuspend(struct usb_device *);
 extern void usb_disable_autosuspend(struct usb_device *);
 
@@ -68,7 +71,13 @@ extern void usb_disable_autosuspend(struct usb_device *);
 extern char *get_last_backlight_value(void);
 extern int asus_current_fps;
 extern bool g_Charger_mode;
+extern bool g_is_new_station;
+extern bool g_skip_ss_lanes;
 /* ASUS BSP DP --- */
+
+extern bool g_station_sleep;
+extern int lid_status;
+extern bool g_station_dp_disconnect;
 
 // For HID wait for completion
 struct completion hid_state;
@@ -161,38 +170,109 @@ int ec_hid_event_unregister(struct notifier_block *nb)
 }
 EXPORT_SYMBOL(ec_hid_event_unregister);
 
-int hid_to_set_ultra_power_mode(u8 type)
+
+int hid_to_get_ec_fw_ver(void)
 {
 	int ret = 0;
 
-	printk("[EC_HID] : enter hid_to_set_ultra_power_mode \n");
-	
 	mutex_lock(&ec_i2c_func_mutex);
 
-	if(ec_i2c_is_suspend == 1)
-	{
-		printk("[EC_HID] : ec i2c does not resume ,set_ultra_power_mode later\n");
-		ec_i2c_ultra_mode = 1;
-		mutex_unlock(&ec_i2c_func_mutex);
-		return ret;
-	}
-	
-	if(ec_battery_func.i2c_set_ultra_power_mode == NULL)
+	if(ec_fw_ver.i2c_get_ec_fw_ver == NULL)
 	{
 		mutex_unlock(&ec_i2c_func_mutex);
-		printk("[EC_HID] hid_to_get_battery_cap == NULL\n");
+		printk("[EC_HID] ec_fw_ver.i2c_get_ec_fw_ver == NULL \n");
 		ret = -1;
 		return ret;
 	}
 
 	mutex_unlock(&ec_i2c_func_mutex);
-	ret = ec_battery_func.i2c_set_ultra_power_mode(type);
+	ret = ec_fw_ver.i2c_get_ec_fw_ver();
 
-	ec_i2c_ultra_mode = 0;
+	return ret;
+}
+EXPORT_SYMBOL(hid_to_get_ec_fw_ver);
+
+int hid_to_set_ultra_power_mode(u8 type)  // 1:In, 0:Out
+{
+	int ret = 0;
+
+	mutex_lock(&ec_i2c_func_mutex);
+
+	printk("[EC_HID] hid_to_set_ultra_power_mode: type %d, ec_i2c_ultra_mode %d\n", type, ec_i2c_ultra_mode);
+	if(ec_i2c_is_suspend == 1)
+	{
+		printk("[EC_HID] : ec i2c does not resume ,set_ultra_power_mode later\n");
+		mutex_unlock(&ec_i2c_func_mutex);
+		return ret;
+	}
+
+	if(ec_battery_func.i2c_set_ultra_low_power_mode == NULL)
+	{
+		mutex_unlock(&ec_i2c_func_mutex);
+		printk("[EC_HID] i2c_set_ultra_low_power_mode == NULL\n");
+		ret = -1;
+		return ret;
+	}
+
+	mutex_unlock(&ec_i2c_func_mutex);
+	ret = ec_battery_func.i2c_set_ultra_low_power_mode(type);
 	
 	return ret;
 }
 EXPORT_SYMBOL(hid_to_set_ultra_power_mode);
+
+static int hid_to_set_phone_panel_state(u8 type)  // 1:On, 0:Off
+{
+	int ret = 0;
+
+	mutex_lock(&ec_i2c_func_mutex);
+
+	printk("[EC_HID] hid_to_set_phone_panel_state: type %d\n", type);
+
+	if(ec_battery_func.i2c_set_phone_panel_state == NULL)
+	{
+		mutex_unlock(&ec_i2c_func_mutex);
+		printk("[EC_HID] i2c_set_phone_panel_state == NULL\n");
+		ret = -1;
+		return ret;
+	}
+
+	mutex_unlock(&ec_i2c_func_mutex);
+	ret = ec_battery_func.i2c_set_phone_panel_state(type);
+
+	return ret;
+}
+//EXPORT_SYMBOL(hid_to_set_phone_panel_state);
+
+int hid_to_set_station_cover_state(u8 type)  // 1:Close , 0:Open
+{
+	int ret = 0;
+
+	mutex_lock(&ec_i2c_func_mutex);
+
+	printk("[EC_HID] hid_to_set_station_cover_state: type %d\n", type);
+
+	if(ec_battery_func.i2c_set_station_cover_state == NULL)
+	{
+		mutex_unlock(&ec_i2c_func_mutex);
+		printk("[EC_HID] hid_to_set_station_cover_state == NULL\n");
+		ret = -1;
+		return ret;
+	}
+
+	mutex_unlock(&ec_i2c_func_mutex);
+	ret = ec_battery_func.i2c_set_station_cover_state(type);
+	if (ret < 0)
+		return ret;
+
+	if( type && g_station_sleep && g_station_dp_disconnect && !ec_i2c_ultra_mode ){
+		printk("[EC_HID] Lid status %d, but ec_i2c_ultra_mode is %d.\n", type, ec_i2c_ultra_mode);
+		hid_to_set_ultra_power_mode(1);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(hid_to_set_station_cover_state);
 
 int hid_to_get_battery_cap(int *cap)
 {
@@ -278,7 +358,7 @@ int ec_i2c_check_interrupt(char *type, char *event)
 {
 	int ret = 0;
 
-	printk("[EC_HID] ec_i2c_check_interrupt gDongleType:ec_i2c_is_suspend %d:%d\n",gDongleType,ec_i2c_is_suspend);
+	printk("[EC_HID] ec_i2c_check_interrupt: [gDongleType:ec_i2c_is_suspend]=[%d:%d]\n",gDongleType,ec_i2c_is_suspend);
 
 	if((gDongleType == 100 || gDongleType == 200 || gDongleType == 2) && (ec_i2c_is_suspend == 1))
 	{
@@ -576,6 +656,7 @@ static ssize_t pogo_sync_key_store(struct device *dev,
 			blocking_notifier_call_chain(&ec_hid_event_header,gDongleType,NULL);
 			ec_hid_uevent();
 			is_porta_cc_locked = 0;
+			g_skip_ss_lanes = false; /* ASUS BSP DP +++ */
 		} else{
 			printk("[EC_HID] : EC I2C Driver has been removed, fore unlock pogo_sync_key!!\n");
 			is_porta_cc_locked = 0;
@@ -1467,6 +1548,35 @@ static ssize_t drm_panel_register(struct device *dev,
 	return count;
 }
 
+static ssize_t touch_recovery_status(struct device *dev,
+					 struct device_attribute *mattr,
+					 char *buf)
+{
+	printk("[EC_HID] Station auto recovery : %d\n", station_touch_recovery);
+	return sprintf(buf, "%d\n", station_touch_recovery);
+}
+
+static ssize_t touch_recovery_store(struct device *dev,
+					  struct device_attribute *mattr,
+					  const char *data, size_t count)
+{
+	int ret = 0;
+	u32 val;
+
+	ret = kstrtou32(data, 10, &val);
+	if (ret)
+		return ret;
+
+	if (val == 1)
+		station_touch_recovery = 1;
+	else if (val == 2)
+		station_touch_recovery = 2;
+	else
+		station_touch_recovery = 0;
+
+	return count;
+}
+
 static DEVICE_ATTR(gDongleType, S_IRUGO | S_IWUSR, gDongleType_show, gDongleType_store);
 static DEVICE_ATTR(lock, S_IRUGO | S_IWUSR, lock_show, lock_store);
 static DEVICE_ATTR(pogo_mutex, S_IRUGO | S_IWUSR, pogo_mutex_show, pogo_mutex_store);
@@ -1484,6 +1594,7 @@ static DEVICE_ATTR(pogo_sync_key, S_IRUGO | S_IWUSR, pogo_sync_key_show, pogo_sy
 static DEVICE_ATTR(is_ec_has_removed, S_IRUGO | S_IWUSR, is_ec_has_removed_show, is_ec_has_removed_store);
 static DEVICE_ATTR(inbox_audio_switch, S_IRUGO | S_IWUSR, inbox_audio_switch_show, inbox_audio_switch_store);
 static DEVICE_ATTR(drm_panel, S_IRUGO | S_IWUSR, NULL, drm_panel_register);
+static DEVICE_ATTR(touch_recovery, S_IRUGO | S_IWUSR, touch_recovery_status, touch_recovery_store);
 
 static struct attribute *ec_hid_attrs[] = {
 	&dev_attr_gDongleType.attr,
@@ -1503,6 +1614,7 @@ static struct attribute *ec_hid_attrs[] = {
 	&dev_attr_is_ec_has_removed.attr,
 	&dev_attr_inbox_audio_switch.attr,
 	&dev_attr_drm_panel.attr,
+	&dev_attr_touch_recovery.attr,
 	NULL
 };
 
@@ -1515,7 +1627,7 @@ void do_ec_porta_cc_connect(void)
 	int state = 255;
 
 	if(1 == pogo_sync_key){
-		printk("[EC_HID]:pogo_sync_key=1,ignore this interrupt\n");
+		printk("[EC_HID] : pogo_sync_key=1,ignore this interrupt\n");
 		return;
 	}
 	
@@ -1546,7 +1658,11 @@ void do_ec_porta_cc_connect(void)
 				ec_i2c_set_display_fps(2);
 			else if (asus_current_fps == 90)
 				ec_i2c_set_display_fps(1);
-			else if (asus_current_fps >= 120)
+			else if (asus_current_fps == 120)
+				ec_i2c_set_display_fps(0);
+			else if (asus_current_fps >= 144 && g_is_new_station)
+				ec_i2c_set_display_fps(3);
+			else if (asus_current_fps >= 144 && !g_is_new_station)
 				ec_i2c_set_display_fps(0);
 		} else {
 			printk("[EC_HID] Is in charger mode.\n");
@@ -1564,8 +1680,10 @@ void do_ec_porta_cc_connect(void)
 		blocking_notifier_call_chain(&ec_hid_event_header,gDongleType,NULL);
 		ec_hid_uevent();
 		is_porta_cc_locked = 0;
+		g_skip_ss_lanes = false; /* ASUS BSP DP +++ */
 	} else {
-		printk("[EC_HID] :  error case\n");
+		pogo_sync_key = 0;
+		printk("[EC_HID] : error case, reset pogo_sync_key %d\n", pogo_sync_key);
 	}
 
 	return;
@@ -1581,6 +1699,10 @@ int ec_hid_display_notifier_call(struct notifier_block *self, unsigned long even
 	if (!evdata)
 		return 0;
 
+	if (gDongleType == 2){
+		asus_wait4hid();
+	}
+
 	if (event != DRM_PANEL_EVENT_BLANK)
 		return 0;
 
@@ -1590,12 +1712,28 @@ int ec_hid_display_notifier_call(struct notifier_block *self, unsigned long even
 		switch (blank) {
 		case DRM_PANEL_BLANK_POWERDOWN:
 			// panel is power down notify
-			printk("[EC_HID] panel off notify");
+			printk("[EC_HID] Panel Off: Power Saving %d, DP Disconnect %d, Lid status %d\n", g_station_sleep, g_station_dp_disconnect, lid_status);
+			hid_switch_usb_autosuspend(true);
+			block_hid_input = true;
+			hid_to_set_phone_panel_state(0);
+
+			if (g_station_sleep && g_station_dp_disconnect && lid_status && !ec_i2c_ultra_mode){
+				hid_to_set_ultra_power_mode(1);
+			}
+
+			//dwc3_station_uevent(2);
 		break;
 
 		case DRM_PANEL_BLANK_UNBLANK:
 			// panel is power on notify
-			printk("[EC_HID] panel on notify");
+			printk("[EC_HID] Panel On: Ultra Low Power mode %d\n", ec_i2c_ultra_mode);
+			hid_switch_usb_autosuspend(false);
+			block_hid_input = false;
+			hid_to_set_phone_panel_state(1);
+
+			if (ec_i2c_ultra_mode == 1)
+				hid_to_set_ultra_power_mode(0);
+			//dwc3_station_uevent(1);
 		break;
 
 		default:
@@ -1754,7 +1892,7 @@ static int ec_hid_probe(struct platform_device *pdev)
 	ec_battery_func.i2c_get_battery_cur = NULL;
 	ec_battery_func.i2c_get_battery_vol = NULL;
 	ec_battery_func.i2c_get_charger_type = NULL;
-	ec_battery_func.i2c_set_ultra_power_mode = NULL;
+	ec_battery_func.i2c_set_ultra_low_power_mode = NULL;
 
 	ec_set_dp_display.i2c_set_dp_display_id = NULL;
 	ec_set_dp_display.i2c_set_display_bl = NULL;
@@ -1762,6 +1900,7 @@ static int ec_hid_probe(struct platform_device *pdev)
 	ec_set_dp_display.i2c_set_display_fps = NULL;
 	ec_set_dp_display.i2c_set_hbm = NULL;
 	ec_porta_cc.ec_i2c_get_porta_cc_state = NULL;
+	ec_fw_ver.i2c_get_ec_fw_ver = NULL;
 	
 	dev = device_create(ec_hid_class, &pdev->dev,
 			    ec_hid_device->devt, ec_hid_device, "dongle");

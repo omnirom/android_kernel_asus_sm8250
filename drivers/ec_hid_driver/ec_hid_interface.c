@@ -60,7 +60,7 @@ static int ec_usb_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	printk("[EC_USB] hid->name : %s\n", hdev->name);
 	printk("[EC_USB] hid->vendor  : 0x%x\n", hdev->vendor);
 	printk("[EC_USB] hid->product : 0x%x\n", hdev->product);
-	//ASUSEvtlog("[EC_USB] Station ENE 6K7750 connect\n");
+	ASUSEvtlog("[EC_USB] Station ENE 6K7750 connect\n");
 
 	ret = hid_parse(hdev);
 	if (ret) {

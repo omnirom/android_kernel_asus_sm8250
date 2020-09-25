@@ -28,8 +28,11 @@ extern struct blocking_notifier_head ec_hid_event_header;
 extern int asus_current_fps;
 extern char *get_last_backlight_value(void);
 extern int g_station_hbm_mode;
-//extern void asus_dp_change_state(bool mode, int type);
+extern void asus_dp_change_state(bool mode, int type);
 extern bool g_Charger_mode;
+extern bool g_is_new_station;
+//extern bool g_station_sleep;
+//extern int lid_status;
 /* ASUS BSP DP --- */
 
 char asus_gpio = 0;
@@ -105,7 +108,7 @@ int ec_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *r
             for (i = 0; i < I2C_RETRY_NUMBER; i++) {
                 ret = i2c_transfer(client->adapter, msgs, 2);
                 if (ret < 0) {
-                    printk("[EC_I2C] : i2c_transfer(write) error, ret=%d!!", ret);
+                    printk("[EC_I2C] : i2c_transfer(write) error, ret=%d!!\n", ret);
                 } else
                     break;
             }
@@ -122,7 +125,7 @@ int ec_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *r
             for (i = 0; i < I2C_RETRY_NUMBER; i++) {
                 ret = i2c_transfer(client->adapter, msgs, 1);
                 if (ret < 0) {
-                    printk("[EC_I2C] : i2c_transfer(read) error, ret=%d!!", ret);
+                    printk("[EC_I2C] : i2c_transfer(read) error, ret=%d!!\n", ret);
                 } else
                     break;
             }
@@ -138,33 +141,28 @@ int ec_i2c_get_porta_cc_state(int *state)
 	int ret = 0;
 	char cmd = CMD_I2C_GET_PORTA_CC_STATE;
 	char temp[2]={0};
-
-
-	printk("[EC_I2C] ec_i2c_get_porta_cc_state\n");
+	//printk("[EC_I2C] ec_i2c_get_porta_cc_state\n");
 
 	if(ec_i2c_data)
 	{
-		printk("[EC_I2C] ec_i2c_data has init\n");
+		//printk("[EC_I2C] ec_i2c_data has init\n");
 		ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,temp,2);
 		if(ret < 0)
 		{
-			printk("[EC_I2C] ec_i2c_get_porta_cc_state I2C error!!n");
-			ec_porta_cc.ec_i2c_get_porta_cc_state = NULL;
+			printk("[EC_I2C] CMD_I2C_GET_PORTA_CC_STATE I2C error\n");
+			//ec_porta_cc.ec_i2c_get_porta_cc_state = NULL;
 			return ret;
 		}
 	}
 	else
 	{
-		printk("[EC_I2C] ec_i2c_data does not init\n");
+		printk("[EC_I2C] ec_i2c_data has not init\n");
 		ret = -1;
 	}
 
 	*state = temp[1];
-	
-	printk("[EC_I2C] ec_i2c_get_porta_cc_state state is %d\n",*state);
-
+	printk("[EC_I2C] CMD_I2C_GET_PORTA_CC_STATE: state is %d\n", (*state));
 	return ret;
-
 }
 
 int i2c_set_display_bl(char* brightness)
@@ -250,7 +248,7 @@ int i2c_to_gpio_set(u8 gpio, u8 value)
 	int ret = 0;
 	char cmd[3] = {0};
 
-	printk("[EC_I2C] i2c_to_gpio_set : GPIO[%d] : 0x%x\n", gpio, value);
+	printk("[EC_I2C] CMD_I2C_TO_SET_GPIO : GPIO[%d] : 0x%x\n", gpio, value);
 	cmd[0] = CMD_I2C_TO_SET_GPIO;
 	cmd[1] = gpio;
 	cmd[2] = value;
@@ -318,15 +316,18 @@ int i2c_notify_ec_enumerate_message(char val)
 	if(ec_i2c_data)
 	{
 		ret = ec_i2c_write(ec_i2c_data->client,cmd,2);
-		if(ret < 0)
-			printk("[EC_I2C] CMD_I2C_NOTIFY_EC_ENUMERATE wirte fail\n");
+		if(ret < 0){
+			printk("[EC_I2C] CMD_I2C_NOTIFY_EC_ENUMERATE I2C error\n");
+			return -1;
+		}
 	}
 	else
 	{
-		printk("[EC_I2C] ec_i2c_data does not init\n");
+		printk("[EC_I2C] ec_i2c_data has not init\n");
 		ret = -1;
 	}
 
+	printk("[EC_I2C] CMD_I2C_NOTIFY_EC_ENUMERATE 0x%x\n", cmd[1]);
 	return ret;
 }
 
@@ -336,37 +337,84 @@ int i2c_get_ec_ready_state(void)
 	char cmd = CMD_I2C_GET_EC_READY_STATE;
 	char temp[2]={0};
 
-
-	printk("[EC_I2C] i2c_get_ec_ready_state\n");
-
 	if(ec_i2c_data)
 	{
-		printk("[EC_I2C] ec_i2c_data has init\n");
+		//printk("[EC_I2C] ec_i2c_data has init\n");
 		ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,temp,2);
-
+		if(ret < 0)
+		{
+			printk("[EC_I2C] CMD_I2C_GET_EC_READY_STATE I2C error\n");
+			gEC_init = 0;
+			return -1 ;
+		}
 		gEC_init = temp[1];
 	}
 	else
 	{
-		printk("[EC_I2C] ec_i2c_data does not init\n");
+		printk("[EC_I2C] ec_i2c_data has not init\n");
 		ret = -1;
 	}
 
-	printk("[EC_I2C] i2c_get_ec_ready_state gEC_init is %d\n",gEC_init);
-
+	printk("[EC_I2C] CMD_I2C_GET_EC_READY_STATE: gEC_init is %d\n",gEC_init);
 	return ret;
 }
 
-int i2c_set_ultra_power_mode(u8 type)
+int i2c_set_ultra_low_power_mode(u8 type)		// 1:In, 0:Out
 {
 	int ret = 0;
 	char cmd[2] = {0};
 	
-	cmd[0] = CMD_I2C_SET_COVER_STATE;
+	cmd[0] = CMD_I2C_SET_ULTRA_LOW_POWER_MODE;	//0x0C
 	cmd[1] = type;
 
 	ret = ec_i2c_write(ec_i2c_data->client,cmd,2);
+	if(ret < 0)
+	{
+		printk("[EC_I2C] CMD_I2C_SET_ULTRA_LOW_POWER_MODE I2C error\n");
+		ec_i2c_ultra_mode = 0;
+		return -1 ;
+	}
 
+	printk("[EC_I2C] CMD_I2C_SET_ULTRA_LOW_POWER_MODE: Type %d\n", cmd[1]);
+	ec_i2c_ultra_mode = (int)type;
+	return ret;
+}
+
+int i2c_set_phone_panel_state(u8 type)		// 1:On, 0:Off
+{
+	int ret = 0;
+	char cmd[2] = {0};
+	
+	cmd[0] = CMD_I2C_SET_PHONE_PANEL_STATE;	//0x20
+	cmd[1] = type;
+
+	ret = ec_i2c_write(ec_i2c_data->client,cmd,2);
+	if(ret < 0)
+	{
+		printk("[EC_I2C] CMD_I2C_SET_PHONE_PANEL_STATE I2C error\n");
+		return -1 ;
+	}
+
+	printk("[EC_I2C] CMD_I2C_SET_PHONE_PANEL_STATE: Type %d\n", cmd[1]);
+	return ret;
+}
+
+int i2c_set_station_cover_state(u8 type)	// 1:Close, 0:Open
+{
+	int ret = 0;
+	char cmd[2] = {0};
+	
+	cmd[0] = CMD_I2C_SET_COVER_STATE;	//0x21
+	cmd[1] = type;
+
+	ret = ec_i2c_write(ec_i2c_data->client,cmd,2);
+	if(ret < 0)
+	{
+		printk("[EC_I2C] CMD_I2C_SET_COVER_STATE I2C error\n");
+		return -1 ;
+	}
+
+	printk("[EC_I2C] CMD_I2C_SET_COVER_STATE: Type %d\n", cmd[1]);
 	return ret;
 }
 
@@ -380,7 +428,7 @@ int i2c_get_charger_type(int *type, short *vol, short *cur)
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,6);
 	if(ret < 0)
 	{
-		printk("[EC_I2C] I2C not connect \n");
+		printk("[EC_I2C] CMD_I2C_GET_CHARGER_TYPE I2C error\n");
 		return -1 ;
 	}
 	
@@ -392,6 +440,7 @@ int i2c_get_charger_type(int *type, short *vol, short *cur)
 	(*cur) = buffer[4] << 8;
 	(*cur) += buffer[5];
 
+	printk("[EC_I2C] CMD_I2C_GET_CHARGER_TYPE: Type %d, Vol %d, Cur %d\n", (*type), (*vol), (*cur));
 	return ret;
 }
 
@@ -405,17 +454,14 @@ int i2c_get_battery_cap(int *cap)
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,2);
 	if (ret < 0)
 	{
-		printk("[EC_I2C] i2c_get_battery_cap I2C not connect \n");
+		printk("[EC_I2C] CMD_I2C_GET_BATTERY_CAP I2C error\n");
 		return -1 ;
 	}
 
 	*cap = buffer[1];
-
-	printk("[EC_I2C] : battery_cap is %d\n",*cap);
-
+	printk("[EC_I2C] CMD_I2C_GET_BATTERY_CAP: %d\n", (*cap));
 	return ret;
 }
-
 
 int i2c_get_battery_vol(int *vol)
 {
@@ -428,14 +474,14 @@ int i2c_get_battery_vol(int *vol)
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,3);
 	if (ret < 0)
 	{
-		printk("[EC_I2C] I2C not connect \n");
+		printk("[EC_I2C] CMD_I2C_GET_BATTERY_VOL I2C error\n");
 		return -1 ;
 	}
-
 
 	*vol = buffer[1] << 8;
 	*vol += buffer[2];
 
+	printk("[EC_I2C] CMD_I2C_GET_BATTERY_VOL: %d\n", (*vol));
 	return ret;
 }
 
@@ -450,14 +496,46 @@ int i2c_get_battery_cur(short *cur)
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,3);
 	if (ret < 0)
 	{
-		printk("[EC_I2C] I2C not connect \n");
+		printk("[EC_I2C] CMD_I2C_GET_BATTERY_CUR I2C error\n");
 		return -1 ;
 	}
 
-
 	*cur = buffer[1] << 8;
 	*cur += buffer[2];
-	
+
+	printk("[EC_I2C] CMD_I2C_GET_BATTERY_CUR: %d\n", (*cur));
+	return ret;
+}
+
+int i2c_get_eventlog(char *log)
+{
+	int ret = 0;
+	char cmd = 0;
+	char buffer[16];
+
+	memset(buffer , 0, sizeof(buffer));
+
+	cmd = CMD_I2C_GET_EventLog;
+
+	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer, 16);
+	if (ret < 0)
+	{
+		printk("[EC_I2C] CMD_I2C_GET_EventLog I2C error\n");
+		return -1 ;
+	}
+
+	//printk("[EC_I2C] CMD_I2C_GET_EventLog: %s\n", (buffer+1));
+	log = (buffer+2);
+
+	if (buffer[1] == 'e')
+		//printk("[EC_I2C] Station Event Log\n");
+		ASUSEvtlog("[EC_HID][EC_LOG] %s\n", log);
+	else if (buffer[1] == 'd')
+		//printk("[EC_I2C] Station EC Log\n");
+		printk("[EC_HID][EC_LOG] %s\n", log);
+	else
+		printk("[EC_HID][EC_LOG] %s\n", log);
+
 	return ret;
 }
 
@@ -466,34 +544,35 @@ int i2c_check_interrupt(char *type, char *event)
 	int ret = 0;
 	char cmd = CMD_I2C_GET_INT_TYPE;
 	char temp[2]={0};
+	char log[16]={0};
 
 	if(ec_i2c_data)
 	{
-		printk("[EC_I2C] ec_i2c_data has init\n");
+		//printk("[EC_I2C] ec_i2c_data has init\n");
 		ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,temp,2);
 
 		*type = temp[1];
 	}
 	else
 	{
-		printk("[EC_I2C] ec_i2c_data does not init\n");
+		printk("[EC_I2C] ec_i2c_data has not init\n");
 		ret = -1;
 		return ret;
 	}
 
-	printk("[EC_I2C] i2c_check_interrupt type is 0x%x\n",*type);
+	printk("[EC_I2C] CMD_I2C_GET_INT_TYPE: type is 0x%x\n",*type);
 
 	(*event) = 0;
 
-	if((*type) & 0x1)
+	if((*type) & NotifyUSB)
 	{
 		printk("[EC_I2C] Detect SDP\n");
 	}
 
-	if((*type) & 0x2)
+	if((*type) & NotifyThermalAlert)
 	{
-		printk("[EC_I2C] Detect Thermal alert.\n");
-		
+		printk("[EC_I2C] Detect Thermal alert!!!\n");
+
 		// Get thermal alert
 		cmd = CMD_I2C_GET_THERMAL_ALERT;
 		temp[0]=0;
@@ -502,21 +581,42 @@ int i2c_check_interrupt(char *type, char *event)
 		ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,temp,2);
 
 		(*event) = temp[1];
-		printk("[EC_I2C] Thermal alert event is 0x%x.\n",*event);
+		ASUSEvtlog("[EC_I2C] Thermal alert event is 0x%x.\n",*event);
 	}
 
-	if((*type) & 0x4)
+	if((*type) & NotifyWakeFromUltraPowerMode)
 	{
-		printk("[EC_I2C] Ultra Power Mode Wake Up\n");
+		printk("[EC_I2C] Wake Up From Ultra Power Mode.\n");
 	}
 
-	if((*type) & 0x40)
+	if((*type) & NotifyFacTest)
 	{
-		printk("[EC_I2C] Station EC Zero shutdown!!!!\n");
+		printk("[EC_I2C] NotifyPhoneFacTest.\n");
+	}
+
+	if((*type) & NotifyEvtLog)
+	{
+		//printk("[EC_I2C] NotifyPhoneEvtLog.\n");
+		ret = i2c_get_eventlog(log);
+	}
+
+	if((*type) & NotifyLatchState)
+	{
+		printk("[EC_I2C] Latch State Change.\n");
+	}
+
+	if((*type) & NotifyBatteryZero)
+	{
+		printk("[EC_I2C] Station EC Zero battery shutdown!!!!\n");
 		station_shutdown = true;
 	} else
 		station_shutdown = false;
-	
+
+	if((*type) & NotifyAnXInt)
+	{
+		printk("[EC_I2C] Anx Int!!\n");
+	}
+
 	return ret;
 }
 
@@ -528,15 +628,14 @@ static ssize_t pd_fw_ver_show(struct device *dev,
 	u8 fw_ver[3] = {0};
 	char cmd = 0;
 
-	printk("[EC_I2C] pd_fw_ver_show\n");
-
 	cmd = CMD_I2C_GET_PD_FW;
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,fw_ver,3);
-	if (ret < 0)
-		return sprintf(buf, "FF\n");
+	if (ret < 0){
+		printk("[EC_I2C] CMD_I2C_GET_PD_FW I2C error\n");
+		return sprintf(buf, "i2c_error\n");
+	}
 
-	printk("[EC_I2C] pd_fw_ver_show : %c%c\n",fw_ver[1],fw_ver[2]);
-	
+	printk("[EC_I2C] CMD_I2C_GET_PD_FW: %c%c\n",fw_ver[1],fw_ver[2]);
 	return snprintf(buf, PAGE_SIZE,"%c%c\n", fw_ver[1], fw_ver[2]);
 }
 
@@ -548,23 +647,25 @@ static ssize_t set_color_temp_store(struct device *dev,
 	u32 val;
 	char cmd[2] = {0};
 
-	printk("[EC_I2C] : Enter set_color_temp_store \n");
+	printk("[EC_I2C] Enter set_color_temp_store \n");
 	
 	ret = kstrtou32(data, 10, &val);
 	if (ret)
 	{
-		printk("[EC_I2C] : kstrtou32 ERROR !!\n");
+		printk("[EC_I2C] kstrtou32 ERROR !!\n");
 		return count;
 	}
 
 	cmd[0] =  CMD_I2C_SET_COLOR_TEMP;
 	cmd[1] =  val;
 
-
-	printk("[EC_I2C] : cmd[1] is %d!\n",cmd[1]);
-		
 	ret = ec_i2c_write(ec_i2c_data->client,cmd,2);
+	if (ret < 0){
+		printk("[EC_I2C] CMD_I2C_SET_COLOR_TEMP I2C error\n");
+		return count;
+	}
 
+	printk("[EC_I2C] CMD_I2C_SET_COLOR_TEMP: val %d!\n",cmd[1]);
 	return count;
 }
 
@@ -573,10 +674,10 @@ static ssize_t reconnect_dp_store(struct device *dev,
 					  struct device_attribute *mattr,
 					  const char *data, size_t count)
 {
-	printk("[EC_I2C] : Enter reconnect_dp_store \n");
+	printk("[EC_I2C] Enter reconnect_dp_store \n");
 
-	//asus_dp_change_state(0,4);
-	//asus_dp_change_state(1,4);
+	asus_dp_change_state(0,4);
+	asus_dp_change_state(1,4);
 
 	return count;
 }
@@ -585,13 +686,17 @@ static ssize_t restore_display_config_store(struct device *dev,
 					  struct device_attribute *mattr,
 					  const char *data, size_t count)
 {
-	printk("[EC_I2C] : Enter restore_display_config_store \n");
+	printk("[EC_I2C] Enter restore_display_config_store \n");
 
 	if (asus_current_fps == 60)
 		i2c_set_display_fps(2);
 	else if (asus_current_fps == 90)
 		i2c_set_display_fps(1);
-	else if (asus_current_fps >= 120)
+	else if (asus_current_fps == 120)
+		i2c_set_display_fps(0);
+	else if (asus_current_fps >= 144 && g_is_new_station)
+		i2c_set_display_fps(3);
+	else if (asus_current_fps >= 144 && !g_is_new_station)
 		i2c_set_display_fps(0);
 
 	i2c_set_display_bl(get_last_backlight_value());
@@ -625,9 +730,10 @@ static ssize_t latch_key_state_show(struct device *dev,
 					 char *buf)
 {
 	int state = 255;
-	
+
 	ec_i2c_get_porta_cc_state(&state);
 
+	printk("[EC_I2C] latch_key_state is %d\n", state);
 	return snprintf(buf, PAGE_SIZE,"%d\n", state);
 }
 
@@ -652,7 +758,12 @@ static ssize_t set_cover_state_store(struct device *dev,
 	}
 	
 	ret = ec_i2c_write(ec_i2c_data->client,cmd,2);
+	if (ret < 0){
+		printk("[EC_I2C] CMD_I2C_SET_COVER_STATE I2C error\n");
+		return count;
+	}
 
+	printk("[EC_I2C] CMD_I2C_SET_COVER_STATE: 0x%x\n", cmd[1]);
 	return count;
 }
 
@@ -677,7 +788,12 @@ static ssize_t disable_charger_suspend_store(struct device *dev,
 	}
 	
 	ret = ec_i2c_write(ec_i2c_data->client,cmd,2);
+	if (ret < 0){
+		printk("[EC_I2C] CMD_I2C_DISABLE_CHARGER_SUSPEND I2C error\n");
+		return count;
+	}
 
+	printk("[EC_I2C] CMD_I2C_DISABLE_CHARGER_SUSPEND 0x%x\n", cmd[1]);
 	return count;
 }
 
@@ -712,22 +828,32 @@ static ssize_t model_name_show(struct device *dev,
 
 	cmd = CMD_I2C_GET_MODEL_NAME;
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,12);
-	if (ret < 0)
+	if (ret < 0){
+		printk("[EC_I2C] CMD_I2C_GET_MODEL_NAME I2C error\n");
 		return sprintf(buf, "%s\n", "I2C not connect");
+	}
 
+	printk("[EC_I2C] CMD_I2C_GET_MODEL_NAME %s\n", &buffer[1]);
 	return snprintf(buf, PAGE_SIZE,"%s\n", &buffer[1]);
 }
 
-static int get_station_hwid(void){
+static int i2c_get_station_hwid(void){
 	int ret = 0;
 	char buffer[3] = {0};
+	char model_name[12] = {0};
 	char cmd = 0;
+
+	if (EC_FW_VER < 535){
+		printk("[EC_I2C] EC FW %d is too old, set Station HWID as ROG_Station2\n", EC_FW_VER);
+		Station_HWID = ROG_Station2;
+		return 0;
+	}
 
 	cmd = CMD_I2C_GET_HW_ID;
 
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,3);
 	if (ret < 0){
-		printk("[EC_I2C] I2C not connect, get HWID fail\n");
+		printk("[EC_I2C] CMD_I2C_GET_HW_ID I2C error\n");
 		Station_HWID = 255;
 		return -1;
 	}
@@ -736,21 +862,35 @@ static int get_station_hwid(void){
 		Station_HWID = ROG_Station2;
 	else if ( (buffer[1] == 1) && (buffer[2] == 0) )
 		Station_HWID = ROG_Station3;
+	else if ( (buffer[1] == 0) && (buffer[2] == 1) ){
+
+		// WorkAround Station HWID Unstable.
+		cmd = CMD_I2C_GET_MODEL_NAME;
+		ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,model_name,12);
+		if (ret < 0){
+			printk("[EC_I2C] CMD_I2C_GET_MODEL_NAME I2C error\n");
+		}
+
+		if(strncmp(&model_name[1], "ZS660KLS", 8) ==0){
+			printk("[EC_I2C] model_name: ZS660KLS, force set HWID is ROG_Station2", model_name);
+			Station_HWID = ROG_Station2;
+		}else
+			Station_HWID = ROG_Station3;
+
 	//else if ( (buffer[1] == 0) && (buffer[2] == 0) )
-	//else if ( (buffer[1] == 0) && (buffer[2] == 1) )
-	else
+	}else
 		Station_HWID = ROG_Station_other;
 
-	printk("[EC_I2C] GPIO status : 0x%x, 0x%x, Station HWID = 0x%x\n", buffer[1],buffer[2], Station_HWID);
+	printk("[EC_I2C] CMD_I2C_GET_HW_ID: GPIO status = 0x%x, 0x%x, Station HWID = 0x%x\n", buffer[1],buffer[2], Station_HWID);
 	return 0;
 }
-//EXPORT_SYMBOL(get_station_hwid);
+//EXPORT_SYMBOL(i2c_get_station_hwid);
 
 static ssize_t hw_id_show(struct device *dev,
 					 struct device_attribute *mattr,
 					 char *buf)
 {
-	if (get_station_hwid() < 0)
+	if (i2c_get_station_hwid() < 0)
 		return sprintf(buf, "%s\n", "I2C not connect");
 
 	return snprintf(buf, PAGE_SIZE,"0x%x\n", Station_HWID);
@@ -767,8 +907,10 @@ static ssize_t ec_ssn_show(struct device *dev,
 
 	cmd = CMD_I2C_GET_EC_SSN_L;
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,temp,12);
-	if (ret < 0)
+	if (ret < 0){
+		printk("[EC_I2C]CMD_I2C_GET_EC_SSN_L I2C error\n");
 		return sprintf(buf, "%s\n", "I2C not connect");
+	}
 
 	strncpy(buffer,&temp[1],11);
 
@@ -776,11 +918,14 @@ static ssize_t ec_ssn_show(struct device *dev,
 
 	cmd = CMD_I2C_GET_EC_SSN_H;
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,temp,12);
-	if (ret < 0)
+	if (ret < 0){
+		printk("[EC_I2C]CMD_I2C_GET_EC_SSN_H I2C error\n");
 		return sprintf(buf, "%s\n", "I2C not connect");
+	}
 	
 	strncpy(&buffer[11],&temp[1],11);
 
+	printk("[EC_I2C] EC SSN %s\n",buffer);
 	return snprintf(buf, PAGE_SIZE,"%s\n", buffer);
 }
 
@@ -793,7 +938,7 @@ static ssize_t ec_ssn_store(struct device *dev,
 	char cmd[13] = {0};
 	char temp[22] = {0};
 
-	if(count > 16)
+	if(count > 18)
 	{
 		printk("[EC_I2C] ec_ssn_store count is %d too large,Please check data\n",count);
 		ret = -1;
@@ -811,9 +956,7 @@ static ssize_t ec_ssn_store(struct device *dev,
 	strncpy(&cmd[2],temp,11);
 	
 	printk("[EC_I2C] ASUS COMMAND ID is 0x%x,count is %d\n",cmd[0],count);
-
 	printk("[EC_I2C] cmd[1] is %d \n",cmd[1]);
-
 	printk("[EC_I2C] str_data is %c \n",cmd[12]);
 
 	ret = ec_i2c_write(ec_i2c_data->client,cmd,13);
@@ -826,9 +969,7 @@ static ssize_t ec_ssn_store(struct device *dev,
 	strncpy(&cmd[2],&temp[11],11);
 
 	printk("[EC_I2C] ASUS COMMAND ID is 0x%x,count is %d\n",cmd[0],count);
-
 	printk("[EC_I2C] cmd[1] is %d \n",cmd[1]);
-
 	printk("[EC_I2C] str_data is %s \n",&cmd[2]);
 
 	ret = ec_i2c_write(ec_i2c_data->client,cmd,13);
@@ -884,7 +1025,12 @@ static ssize_t battery_48_hours_state_store(struct device *dev,
 	}
 	
 	ret = ec_i2c_write(ec_i2c_data->client,cmd,2);
+	if (ret < 0){
+		printk("[EC_I2C] CMD_I2C_SET_BATTERY_48H_STATE I2C error\n");
+		return count;
+	}
 
+	printk("[EC_I2C] CMD_I2C_SET_BATTERY_48H_STATE 0x%x\n", cmd[1]);
 	return count;
 }
 
@@ -899,9 +1045,12 @@ static ssize_t battery_48_hours_state_show(struct device *dev,
 	cmd = CMD_I2C_GET_BATTERY_48H_STATE;
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,2);
 
-	if (ret < 0)
+	if (ret < 0){
+		printk("[EC_I2C] CMD_I2C_GET_BATTERY_48H_STATE I2C error\n");
 		return sprintf(buf, "%s\n", "I2C not connect");
+	}
 
+	printk("[EC_I2C] CMD_I2C_GET_BATTERY_48H_STATE 0x%x\n", buffer[1]);
 	return snprintf(buf, PAGE_SIZE,"%d\n", buffer[1]);
 }
 
@@ -915,9 +1064,12 @@ static ssize_t pwm_freq_duty_show(struct device *dev,
 
 	cmd = CMD_I2C_GET_PWM_FRQ_DUTY;
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,3);
-	if (ret < 0)
+	if (ret < 0){
+		printk("[EC_I2C] CMD_I2C_GET_PWM_FRQ_DUTY I2C error\n");
 		return sprintf(buf, "%s\n", "I2C_not_connect");
-	
+	}
+
+	printk("[EC_I2C] CMD_I2C_GET_PWM_FRQ_DUTY: Freq:%d KHz, Duty:%d\n",buffer[1],buffer[2]);
 	return snprintf(buf, PAGE_SIZE,"freq : %d KHz, duty : %d \n", buffer[1],buffer[2]);
 }
 
@@ -942,14 +1094,10 @@ static ssize_t init_state_store(struct device *dev,
 		return ret;
 
 	if (val > 0) {
-		printk("[EC_I2C] Send EC init cmd\n");
-		
+		printk("[EC_I2C] Send EC init cmd\n");	
 		gEC_init = 0;
-	
 		i2c_notify_ec_enumerate_message(0x01);
-		
 		printk("[EC_I2C] gEC_init is %d\n",gEC_init);
-		
 	}else {
 		printk("[EC_I2C] No Send EC init cmd\n");
 		return count;
@@ -965,9 +1113,7 @@ static ssize_t uart_show(struct device *dev,
 	char buffer = 0;
 	int ret = 0;
 
-
 	ret = i2c_get_gpio_data(&buffer,EC_UART_GPIO);
-
 	if (ret < 0)
 		return sprintf(buf, "%s\n", "I2C not connect");
 
@@ -1007,13 +1153,14 @@ static ssize_t dp_fw_ver_show(struct device *dev,
 	u8 fw_ver[3] = {0};
 	char cmd = 0;
 
-	printk("[EC_I2C] dp_fw_ver_show\n");
-
 	cmd = CMD_I2C_GET_DP_FW;
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,fw_ver,3);
-	if (ret < 0)
+	if (ret < 0){
+		printk("[EC_I2C] CMD_I2C_GET_DP_FW I2C error!!!\n");
 		return sprintf(buf, "%s\n", "I2C_not_connect");
+	}
 
+	printk("[EC_I2C] CMD_I2C_GET_DP_FW: 0x%02x%02x\n", fw_ver[1], fw_ver[2]);
 	return snprintf(buf, PAGE_SIZE,"0x%02x%02x\n", fw_ver[1], fw_ver[2]);
 }
 
@@ -1036,6 +1183,7 @@ static ssize_t sd_power_store(struct device *dev,
 					  struct device_attribute *mattr,
 					  const char *data, size_t count)
 {
+/*
 	int ret = 0;
 	u32 val;
 	u8 gpio = 0x1;
@@ -1051,7 +1199,8 @@ static ssize_t sd_power_store(struct device *dev,
 		printk("[EC_I2C] Disable SD power\n");
 		ret = i2c_to_gpio_set(gpio, 1);
 	}
-
+*/
+	printk("[EC_I2C] Station III not support SD slot\n");
 	return count;
 }
 
@@ -1059,10 +1208,10 @@ static ssize_t sd_power_show(struct device *dev,
 					 struct device_attribute *mattr,
 					 char *buf)
 {
+/*
 	char buffer =0;
 	int ret = 0;
 	u8 gpio = 0x1;
-
 
 	ret = i2c_get_gpio_data(&buffer, gpio);
 	if (ret < 0)
@@ -1072,6 +1221,8 @@ static ssize_t sd_power_show(struct device *dev,
 		return snprintf(buf, PAGE_SIZE,"0x%x\n", 0);
 	else
 		return snprintf(buf, PAGE_SIZE,"0x%x\n", 1);
+*/
+	return snprintf(buf, PAGE_SIZE,"no used\n");
 }
 
 static ssize_t PDO_current_show(struct device *dev,
@@ -1117,13 +1268,12 @@ static ssize_t factory_mode_store(struct device *dev,
 		return ret;
 
 	cmd[0] =  CMD_I2C_SET_FACTORY_MODE;
-	
 	if (val > 0) {
 		cmd[1] = 1;
 	}else {
 		cmd[1] = 0;
 	}
-	
+
 	ret = ec_i2c_write(ec_i2c_data->client,cmd,2);
 
 	return count;
@@ -1157,11 +1307,13 @@ static ssize_t thermal_alert_show(struct device *dev,
 
 	cmd = CMD_I2C_GET_THERMAL_ALERT;
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,2);
-	if (ret < 0)
+	if (ret < 0){
+		printk("[EC_I2C] CMD_I2C_GET_THERMAL_ALERT I2C error\n");
 		return sprintf(buf, "%s\n", "I2C not connect");
+	}
 
 	state = (int)buffer[1];
-	
+	printk("[EC_I2C] CMD_I2C_GET_THERMAL_ALERT: State %d\n", state);	
 	return snprintf(buf, PAGE_SIZE,"%d\n", state);
 }
 
@@ -1251,17 +1403,21 @@ static ssize_t enable_mipi_store(struct device *dev,
 		return ret;
 
 	cmd[0] = CMD_I2C_ENABLE_MIPI;
-
 	if (val > 0) {
-		printk("[EC_I2C] Send enable MIPI cmd\n");
+		//printk("[EC_I2C] Send enable MIPI cmd\n");
 		cmd[1] = 1;
 	}else {
-		printk("[EC_I2C]  disable MIP cmd\n");
+		//printk("[EC_I2C] Send disable MIPI cmd\n");
 		cmd[1] = 0;
 	}
 
 	ret=ec_i2c_write(ec_i2c_data->client,cmd,2);
+	if (ret<0){
+		printk("[EC_I2C] CMD_I2C_ENABLE_MIPI I2C error\n");
+		return count;
+	}
 
+	printk("[EC_I2C] CMD_I2C_ENABLE_MIPI %d\n", cmd[1]);
 	return count;
 }
 
@@ -1279,7 +1435,12 @@ static ssize_t duty_store(struct device *dev,
 	cmd[1] = duty;
 	
 	ret=ec_i2c_write(ec_i2c_data->client,cmd,2);
+	if (ret<0){
+		printk("[EC_I2C] CMD_I2C_SET_DUTY I2C error\n");
+		return count;
+	}
 
+	printk("[EC_I2C] CMD_I2C_SET_DUTY %d\n", cmd[1]);
 	return count;
 }
 
@@ -1297,7 +1458,12 @@ static ssize_t freq_store(struct device *dev,
 	cmd[1] = freq;
 
 	ret = ec_i2c_write(ec_i2c_data->client,cmd,2);
+	if (ret<0){
+		printk("[EC_I2C] CMD_I2C_SET_FREQ I2C error\n");
+		return count;
+	}	
 
+	printk("[EC_I2C] CMD_I2C_SET_FREQ %d\n", cmd[1]);
 	return count;
 }
 
@@ -1314,14 +1480,15 @@ static ssize_t rpm_show(struct device *dev,
 	//printk("[EC_I2C] rpm_show 0x%x\n",cmd);
 	
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,3);
+	if (ret < 0){
+		printk("[EC_I2C] CMD_I2C_GET_RPM I2C error\n");
+		return sprintf(buf, "%s\n", "I2C not connect");
+	}
 
 	RPM = buffer[1] << 8;
 	RPM += buffer[2];
 
-	
-	printk("[EC_I2C] rpm_show : %d\n", RPM);
-
-
+	printk("[EC_I2C] CMD_I2C_GET_RPM %d\n", RPM);
 	return snprintf(buf, PAGE_SIZE,"%d\n", RPM);
 }
 
@@ -1333,8 +1500,6 @@ static ssize_t pwm_store(struct device *dev,
 	int ret = 0;
 	char cmd[2] = {0};
 	u32 val;
-
-	printk("[EC_I2C] pwm_store \n");
 
 	ret = kstrtou32(data, 10, &val);
 	if (ret)
@@ -1350,8 +1515,31 @@ static ssize_t pwm_store(struct device *dev,
 	}
 
 	ret = ec_i2c_write(ec_i2c_data->client,cmd,2);
-	
+	if (ret<0){
+		printk("[EC_I2C] CMD_I2C_ENABLE_PWM I2C error\n");
+		return count;
+	}	
+
+	printk("[EC_I2C] CMD_I2C_ENABLE_PWM 0x%x\n", cmd[1]);
 	return count;
+}
+
+int i2c_get_ec_fw_ver(void)
+{
+	int ret = 0;
+	char buffer[4] = {0};
+	char cmd = 0;
+
+	cmd = CMD_I2C_GET_EC_FW_Version;
+	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,4);
+	if (ret < 0){
+		printk("[EC_I2C] CMD_I2C_GET_EC_FW_Version I2C error!!!\n");
+		return ret;
+	}
+
+	sscanf((buffer+1), "%d", &EC_FW_VER);
+	printk("[EC_I2C] EC_FW_VER: %d\n", EC_FW_VER);
+	return ret;
 }
 
 static ssize_t fw_ver_show(struct device *dev,
@@ -1359,32 +1547,21 @@ static ssize_t fw_ver_show(struct device *dev,
 					 char *buf)
 {
 	int ret = 0;
-	char buffer[4] = {0};
-	char cmd = 0;
 
-	cmd = CMD_I2C_GET_EC_FW_Version;
+	ret = i2c_get_ec_fw_ver();
+	if (ret < 0)
+		return sprintf(buf, "%s\n", "I2C not connect");
 
-	printk("[EC_I2C] fw_ver_show\n");
-
-
-	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,4);
-
-	printk("[EC_I2C] FW_VER : %c%c%c\n", buffer[1], buffer[2], buffer[3]);
-
-
-	return snprintf(buf, PAGE_SIZE,"%c%c%c\n", buffer[1], buffer[2], buffer[3]);
+	return snprintf(buf, PAGE_SIZE,"%d\n", EC_FW_VER);
 }
 
 static ssize_t get_gpio_store(struct device *dev,
 					  struct device_attribute *mattr,
 					  const char *data, size_t count)
 {
-
-	printk("[EC_I2C] get_gpio_store\n");
 	
 	sscanf(data, "%x", &asus_gpio);
-
-	printk("[EC_I2C] asus_gpio is 0x%x\n",asus_gpio);
+	printk("[EC_I2C] get_gpio_store: set GPIO Number is 0x%x\n",asus_gpio);
 
 	return count;
 }
@@ -1396,12 +1573,13 @@ static ssize_t get_gpio_show(struct device *dev,
 	int ret = 0;
 	char buffer = 0;
 
-	printk("[EC_I2C] get_gpio_show\n");
-
 	ret = i2c_get_gpio_data(&buffer,asus_gpio);
-	if (ret < 0)
+	if (ret < 0){
+		printk("[EC_I2C] get_gpio_show: I2C error\n");
 		return sprintf(buf, "%s\n", "I2C not connect");
+	}
 
+	printk("[EC_I2C] get_gpio_show: get GPIO[0x%x] is 0x%x\n", asus_gpio,buffer);
 	return sprintf(buf, "0x%x\n", buffer);
 }
 
@@ -1413,10 +1591,13 @@ static ssize_t set_gpio_store(struct device *dev,
 	int gpio = 0, gpio_value = 0;
 
 	sscanf(data, "%x %x", &gpio, &gpio_value);
-
 	ret = i2c_to_gpio_set((u8)gpio, (u8)gpio_value);
+	if (ret<0){
+		printk("[EC_I2C] i2c_to_gpio_set: I2C error\n");
+		return count;
+	}
 
-	printk("[EC_I2C] set_gpio_store : ret %d\n", ret);
+	printk("[EC_I2C] set_gpio_store: set GPIO[0x%x]=0x%x\n", gpio, gpio_value);
 	return count;
 }
 
@@ -1427,14 +1608,16 @@ int i2c_get_state(char *state)
 	char cmd = 0;
 
 	cmd = CMD_I2C_STATE;
-	printk("[EC_I2C] i2c_get_state 0x%x\n",cmd);
 
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,3);
+	if (ret<0){
+		printk("[EC_I2C] CMD_I2C_STATE I2C error\n");
+		return ret;
+	}
 
 	state = buffer;
 	
-	printk("[EC_I2C] i2c_get_state : 0x%x 0x%x\n",state[1],state[2]);
-
+	printk("[EC_I2C] CMD_I2C_STATE 0x%x 0x%x\n",state[1],state[2]);
 	return ret;
 }
 
@@ -1445,13 +1628,15 @@ int hid_to_get_u0504_state(int *state)
 	char cmd = 0;
 
 	cmd = CMD_I2C_U0504_GET_STATE;
-	printk("[EC_I2C] hid_to_get_u0504_state 0x%x\n",cmd);
 
-	ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,2);
+	ret=ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,2);
+	if (ret<0){
+		printk("[EC_I2C] CMD_I2C_U0504_GET_STATE I2C error\n");
+		return ret;
+	}
 
 	*state = (int)buffer[1];
-	
-	printk("[EC_I2C] u0504 state : %d\n", (*state));
+	printk("[EC_I2C] CMD_I2C_U0504_GET_STATE: %d\n", (*state));
 
 	return ret;
 }
@@ -1489,9 +1674,15 @@ static ssize_t disconnect_porta_cc_store(struct device *dev,
 	cmd[1] = 1;
 
 	ret = ec_i2c_write(ec_i2c_data->client,cmd,2);
+	if (ret<0){
+		printk("[EC_I2C] CMD_I2C_DISCONNECT_PORTA_CC I2C error\n");
+		return count;
+	}
 
+	printk("[EC_I2C] CMD_I2C_DISCONNECT_PORTA_CC: %d\n", cmd[1]);
 	return count;
 }
+
 
 static ssize_t connect_porta_cc_store(struct device *dev,
 					  struct device_attribute *mattr,
@@ -1509,7 +1700,12 @@ static ssize_t connect_porta_cc_store(struct device *dev,
 	cmd[1] = 1;
 
 	ret = ec_i2c_write(ec_i2c_data->client,cmd,2);
+	if (ret<0){
+		printk("[EC_I2C] CMD_I2C_CONNECT_PORTA_CC I2C error\n");
+		return count;
+	}
 
+	printk("[EC_I2C] CMD_I2C_CONNECT_PORTA_CC: %d\n", cmd[1]);
 	return count;
 }
 
@@ -1523,13 +1719,12 @@ static ssize_t apl6001_id_show(struct device *dev,
 
 	cmd = CMD_I2C_GET_APL6001_CHIP_ID;
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,3);
-
 	if (ret < 0){
-		printk("[EC_I2C] I2C not connect\n");
+		printk("[EC_I2C] CMD_I2C_GET_APL6001_CHIP_ID I2C error\n");
 		return sprintf(buf, "%s\n", "I2C not connect");
 	}
 
-	printk("[EC_I2C] APL6001 Chip ID 0x%x%x\n", buffer[2],buffer[1]);
+	printk("[EC_I2C] CMD_I2C_GET_APL6001_CHIP_ID 0x%x%x\n", buffer[2],buffer[1]);
 	return snprintf(buf, PAGE_SIZE,"0x%x%x\n", buffer[2],buffer[1]);
 }
 
@@ -1546,11 +1741,11 @@ static ssize_t apl6001_adc1_show(struct device *dev,
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,3);
 
 	if (ret < 0){
-		printk("[EC_I2C] I2C not connect\n");
+		printk("[EC_I2C] CMD_I2C_GET_APL6001_ADC1 I2C error\n");
 		return sprintf(buf, "%s\n", "I2C not connect");
 	}
 
-	printk("[EC_I2C] APL6001 ADC1 0x%x%x\n", buffer[2],buffer[1]);
+	printk("[EC_I2C] CMD_I2C_GET_APL6001_ADC1 0x%x%x\n", buffer[2],buffer[1]);
 	return snprintf(buf, PAGE_SIZE,"0x%x%x\n", buffer[2],buffer[1]);
 }
 
@@ -1562,15 +1757,15 @@ static ssize_t apl6001_adc2_show(struct device *dev,
 	char buffer[3] = {0};
 	char cmd = 0;
 
-	cmd = CMD_I2C_GET_APL6001_ADC2;
+	cmd = CMD_I2C_GET_APL6001_ADAPTER_ID;
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,3);
 
 	if (ret < 0){
-		printk("[EC_I2C] I2C not connect\n");
+		printk("[EC_I2C] CMD_I2C_GET_APL6001_ADAPTER_ID I2C error\n");
 		return sprintf(buf, "%s\n", "I2C not connect");
 	}
 
-	printk("[EC_I2C] APL6001 AdapterID 0x%x%x\n", buffer[2],buffer[1]);
+	printk("[EC_I2C] CMD_I2C_GET_APL6001_ADAPTER_IDD 0x%x%x\n", buffer[2],buffer[1]);
 	return snprintf(buf, PAGE_SIZE,"0x%x%x\n", buffer[2],buffer[1]);
 }
 
@@ -1586,14 +1781,30 @@ static ssize_t apl6001_adc3_show(struct device *dev,
 	ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,buffer,3);
 
 	if (ret < 0){
-		printk("[EC_I2C] I2C not connect\n");
+		printk("[EC_I2C] CMD_I2C_GET_APL6001_ADC3 I2C error\n");
 		return sprintf(buf, "%s\n", "I2C not connect");
 	}
 
-	printk("[EC_I2C] APL6001 ADC3 0x%x%x\n", buffer[2],buffer[1]);
+	printk("[EC_I2C] CMD_I2C_GET_APL6001_ADC3 0x%x%x\n", buffer[2],buffer[1]);
 	return snprintf(buf, PAGE_SIZE,"0x%x%x\n", buffer[2],buffer[1]);
 }
 // Get US5587 ADC 1~3 ---
+
+static ssize_t get_station_log(struct device *dev,
+					 struct device_attribute *mattr,
+					 char *buf)
+{
+	int ret = 0;
+	char log[16] = {0};
+
+	ret = i2c_get_eventlog(log);
+	if (ret < 0){
+		return sprintf(buf, "%s\n", "I2C not connect");
+	}
+
+	printk("[EC_I2C] Station Log: %s\n", log);
+	return snprintf(buf, PAGE_SIZE,"%s\n", log);
+}
 
 static DEVICE_ATTR(u0504, S_IRUGO | S_IWUSR, u0504_show, NULL);
 static DEVICE_ATTR(set_gpio, S_IRUGO | S_IWUSR, NULL, set_gpio_store);
@@ -1642,6 +1853,7 @@ static DEVICE_ATTR(APL6001_ChipID, S_IRUGO | S_IWUSR, apl6001_id_show, NULL);
 static DEVICE_ATTR(APL6001_ADC1, S_IRUGO | S_IWUSR, apl6001_adc1_show, NULL);
 static DEVICE_ATTR(APL6001_AdapterID, S_IRUGO | S_IWUSR, apl6001_adc2_show, NULL);
 static DEVICE_ATTR(APL6001_ADC3, S_IRUGO | S_IWUSR, apl6001_adc3_show, NULL);
+static DEVICE_ATTR(Station_Log, S_IRUGO | S_IWUSR, get_station_log, NULL);
 
 static struct attribute *ec_i2c_attrs[] = {
 	&dev_attr_set_gpio.attr,
@@ -1686,6 +1898,7 @@ static struct attribute *ec_i2c_attrs[] = {
 	&dev_attr_APL6001_ADC1.attr,
 	&dev_attr_APL6001_AdapterID.attr,
 	&dev_attr_APL6001_ADC3.attr,
+	&dev_attr_Station_Log.attr,
 	NULL
 };
 
@@ -1714,11 +1927,11 @@ int ec_i2c_create_sysfs(struct i2c_client *client)
 
     ret = sysfs_create_group(&client->dev.kobj, &ec_i2c_group);
     if (ret) {
-        printk("[EC_I2C]: sysfs_create_group() failed!!");
+        printk("[EC_I2C] sysfs_create_group() failed!!");
         sysfs_remove_group(&client->dev.kobj, &ec_i2c_group);
         return -ENOMEM;
     } else {
-        printk("[EC_I2C]: sysfs_create_group() succeeded!!");
+        printk("[EC_I2C] sysfs_create_group() succeeded!!");
     }
 
     return ret;
@@ -1758,7 +1971,9 @@ static int ec_i2c_remove(struct i2c_client *client)
 	ec_battery_func.i2c_get_battery_cur = NULL;
 	ec_battery_func.i2c_get_battery_vol = NULL;
 	ec_battery_func.i2c_get_charger_type = NULL;
-	ec_battery_func.i2c_set_ultra_power_mode = NULL;
+	ec_battery_func.i2c_set_ultra_low_power_mode = NULL;
+	ec_battery_func.i2c_set_phone_panel_state = NULL;
+	ec_battery_func.i2c_set_station_cover_state = NULL;
 
 	ec_set_dp_display.i2c_set_dp_display_id = NULL;
 	ec_set_dp_display.i2c_set_display_bl = NULL;
@@ -1767,6 +1982,7 @@ static int ec_i2c_remove(struct i2c_client *client)
 	ec_set_dp_display.i2c_set_hbm = NULL;
 
 	ec_porta_cc.ec_i2c_get_porta_cc_state = NULL;
+	ec_fw_ver.i2c_get_ec_fw_ver = NULL;
 	
 	mutex_unlock(&ec_i2c_func_mutex);
 
@@ -1826,7 +2042,7 @@ static int ec_i2c_probe(struct i2c_client *client, const struct i2c_device_id *i
 	do {
 		i2c_notify_ec_enumerate_message(0x01);
 		i2c_get_ec_ready_state();
-		printk("[EC_I2C] EC init state %d\n", gEC_init);
+		//printk("[EC_I2C] EC init state %d\n", gEC_init);
 		msleep(100);
 		retry++;
 	} while(!gEC_init && retry < 10);
@@ -1849,7 +2065,9 @@ static int ec_i2c_probe(struct i2c_client *client, const struct i2c_device_id *i
 	ec_battery_func.i2c_get_battery_cur = i2c_get_battery_cur;
 	ec_battery_func.i2c_get_battery_vol = i2c_get_battery_vol;
 	ec_battery_func.i2c_get_charger_type = i2c_get_charger_type;
-	ec_battery_func.i2c_set_ultra_power_mode = i2c_set_ultra_power_mode;
+	ec_battery_func.i2c_set_ultra_low_power_mode = i2c_set_ultra_low_power_mode;
+	ec_battery_func.i2c_set_phone_panel_state = i2c_set_phone_panel_state;
+	ec_battery_func.i2c_set_station_cover_state = i2c_set_station_cover_state;
 
 	ec_set_dp_display.i2c_set_dp_display_id = i2c_set_dp_display_id;
 	ec_set_dp_display.i2c_set_display_bl = i2c_set_display_bl;
@@ -1859,10 +2077,12 @@ static int ec_i2c_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 
 	ec_porta_cc.ec_i2c_get_porta_cc_state = ec_i2c_get_porta_cc_state;
+	ec_fw_ver.i2c_get_ec_fw_ver = i2c_get_ec_fw_ver;
 
 	mutex_unlock(&ec_i2c_func_mutex);
 
-	get_station_hwid();
+	i2c_get_ec_fw_ver();
+	i2c_get_station_hwid();
 
 	asus_hid_is_connected();
 
@@ -1872,7 +2092,11 @@ static int ec_i2c_probe(struct i2c_client *client, const struct i2c_device_id *i
 			i2c_set_display_fps(2);
 		else if (asus_current_fps == 90)
 			i2c_set_display_fps(1);
-		else if (asus_current_fps >= 120)
+		else if (asus_current_fps == 120)
+			i2c_set_display_fps(0);
+		else if (asus_current_fps >= 144 && g_is_new_station)
+			i2c_set_display_fps(3);
+		else if (asus_current_fps >= 144 && !g_is_new_station)
 			i2c_set_display_fps(0);
 	} else {
 		printk("[EC_I2C] Is in charger mode.\n");
@@ -1903,8 +2127,9 @@ static int ec_i2c_probe(struct i2c_client *client, const struct i2c_device_id *i
 	}
 
 	ec_i2c_driver_state = 1 ;
-
+	
 	printk("[EC_I2C] ec_i2c_probe is :%d\n",ec_i2c_driver_state);
+
 	
 	return err;
 	
@@ -1913,28 +2138,32 @@ static int ec_i2c_probe(struct i2c_client *client, const struct i2c_device_id *i
 int ec_i2c_suspend(struct device *dev)
 {
 	int err = 0;
-
 	ec_i2c_is_suspend = 1;
-	printk("[EC_I2C] ec_i2c_suspend : %d!\n",ec_i2c_is_suspend);
-
+	//printk("[EC_I2C] ec_i2c_suspend : %d!\n",ec_i2c_is_suspend);
+/*
+	printk("[EC_I2C][Suspend] g_station_sleep : %d, lid_status : %d!\n", g_station_sleep, lid_status);
+	if (g_station_sleep && lid_status){
+		//ec_i2c_ultra_mode = 1;
+		i2c_set_ultra_low_power_mode(1);
+	}
+*/
 	return err;
 }
 
 int ec_i2c_resume(struct device *dev)
 {
 	int err = 0;
-
 	ec_i2c_is_suspend = 0;
-	printk("[EC_I2C] ec_i2c_resume : %d!\n",ec_i2c_is_suspend);
-
+	//printk("[EC_I2C] ec_i2c_resume : %d!\n",ec_i2c_is_suspend);
+/*
+	printk("[EC_I2C][Resume] g_station_sleep : %d, lid_status : %d, ec_i2c_ultra_mode : %d\n", g_station_sleep, lid_status, ec_i2c_ultra_mode);
 	if (ec_i2c_ultra_mode == 1)
 	{
-		printk("[EC_I2C] do ultra mode here\n");
-		i2c_set_ultra_power_mode(0);
+		//printk("[EC_I2C] do ultra mode here\n");
+		i2c_set_ultra_low_power_mode(0);
 	}
-
 	ec_i2c_ultra_mode = 0;
-	
+*/
 	return err;
 }
 

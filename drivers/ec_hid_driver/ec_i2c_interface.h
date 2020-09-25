@@ -16,7 +16,9 @@
 #define CMD_I2C_SET_DUTY            0x06
 #define CMD_I2C_SET_FACTORY_MODE    0x08
 #define CMD_I2C_DISABLE_CHARGER_SUSPEND  0x0B
-#define CMD_I2C_SET_COVER_STATE     0x0C
+//#define CMD_I2C_SET_COVER_STATE     0x0C		// Station 2 define
+#define CMD_I2C_SET_ULTRA_LOW_POWER_MODE  0x0C	// Station 3 define
+
 #define CMD_I2C_SET_BATTERY_48H_STATE    0x0E
 #define CMD_I2C_SET_EC_SSN          0x0F
 #define CMD_I2C_WRITE_MODEL_NAME    0x10
@@ -26,6 +28,9 @@
 #define CMD_I2C_CONTROL_DISPLAY     0x16
 #define CMD_I2C_SET_COLOR_TEMP      0x17
 #define CMD_I2C_SET_HBM             0x18
+#define CMD_I2C_SET_PHONE_PANEL_STATE     0x20	// Station 3 define, Station 2 none.
+#define CMD_I2C_SET_COVER_STATE     0x21		// Station 3 define, Station 2 none.
+
 #define CMD_I2C_ENABLE_MIPI         0x50
 #define CMD_I2C_DISCONNECT_PORTA_CC	0x70
 #define CMD_I2C_CONNECT_PORTA_CC	0x71
@@ -55,7 +60,7 @@
 
 #define CMD_I2C_GET_APL6001_CHIP_ID 0x9C
 #define CMD_I2C_GET_APL6001_ADC1	0x9D
-#define CMD_I2C_GET_APL6001_ADC2	0x9E
+#define CMD_I2C_GET_APL6001_ADAPTER_ID	0x9E
 #define CMD_I2C_GET_APL6001_ADC3	0x9F
 
 #define CMD_I2C_GET_GPIO12          0xA0
@@ -69,6 +74,18 @@
 #define CMD_I2C_GET_PANEL_ID        0xB0
 #define CMD_I2C_GET_PD_FW           0xB3
 
+#define CMD_I2C_GET_EventLog		0xF0
+
+// Define Interrupt
+#define NotifyUSB						0x01
+#define NotifyThermalAlert				0x02
+#define NotifyWakeFromUltraPowerMode	0x04
+#define NotifyFacTest					0x08
+#define NotifyEvtLog					0x10
+#define NotifyLatchState				0x20
+#define NotifyBatteryZero				0x40
+#define NotifyAnXInt					0x80
+
 extern u8 gEC_init;
 extern struct completion hid_state;
 extern struct ec_i2c_platform_data *ec_i2c_data;
@@ -78,10 +95,12 @@ extern struct ec_get_gpio_interface ec_get_gpio;
 extern struct ec_battery_interface ec_battery_func;
 extern struct ec_set_dp_display_interface ec_set_dp_display;
 extern struct ec_porta_cc_interface ec_porta_cc;
+extern struct ec_fw_ver_interface ec_fw_ver;
 extern bool station_shutdown;
 
 struct class *ec_i2c_class;
 static DEFINE_MUTEX(i2c_rw_access);
+static int EC_FW_VER;
 
 enum asus_station_HWID
 {

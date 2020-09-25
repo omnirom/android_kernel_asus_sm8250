@@ -725,9 +725,9 @@ gpio_keys_get_devtree_pdata(struct device *dev)
 	struct pinctrl *pw_pinctrl;
 	struct pinctrl_state *pw_pins_active;
 
-	printk("[Station_Key] gpio_keys_get_devtree_pdata +++\n");
+	//printk("[Station_Key] gpio_keys_get_devtree_pdata +++\n");
 	nbuttons = device_get_child_node_count(dev);
-	printk("[Station_Key] nbuttons %d\n", nbuttons);
+	//printk("[Station_Key] nbuttons %d\n", nbuttons);
 
 	if (nbuttons == 0)
 		return ERR_PTR(-ENODEV);
@@ -821,7 +821,7 @@ static int gpio_keys_probe(struct platform_device *pdev)
 	int i, error;
 	int wakeup = 0;
 
-	printk("[Station_Key] gpio_keys_probe() +++\n");
+	printk("[Station_Key] gpio_keys_probe()\n");
 	previous_state = 0;
 
 	if (!pdata) {
@@ -918,7 +918,7 @@ static int gpio_keys_probe(struct platform_device *pdev)
 
 	device_init_wakeup(dev, wakeup);
 
-	printk("[Station_Key] gpio_keys_probe() ---\n");
+	printk("[Station_Key] gpio_keys_probe() done.\n");
 
 	return 0;
 }
@@ -932,14 +932,14 @@ static int gpio_keys_remove(struct platform_device *pdev)
 	struct pinctrl *pw_pinctrl;
 	struct pinctrl_state *pw_pins_active;
 
-	printk("[Station_Key] gpio_keys_remove() +++\n");
+	printk("[Station_Key] gpio_keys_remove()\n");
 
 	for (i = 0; i < ddata->pdata->nbuttons; i++) {
 		struct gpio_button_data *bdata = &ddata->data[i];
-		if (bdata->button->wakeup){
-			printk("[Station_Key][%d] disable_irq_wake irq.\n", i);
-			disable_irq_wake(bdata->irq);
-		}
+		//if (bdata->button->wakeup){
+		//	printk("[Station_Key][%d] disable_irq_wake irq.\n", i);
+		//	disable_irq_wake(bdata->irq);
+		//}
 		printk("[Station_Key][%d] disable & free irq.\n", i);
 		disable_irq(bdata->irq);
 		//free_irq(bdata->irq, bdata);
@@ -986,6 +986,7 @@ gpio_keys_button_enable_wakeup(struct gpio_button_data *bdata)
 {
 	int error;
 
+	printk("[Station_Key] gpio_keys_button_enable_wakeup\n");
 	error = enable_irq_wake(bdata->irq);
 	if (error) {
 		dev_err(bdata->input->dev.parent,

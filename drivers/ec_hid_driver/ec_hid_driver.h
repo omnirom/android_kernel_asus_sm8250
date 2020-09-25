@@ -86,6 +86,10 @@ EXPORT_SYMBOL(hid_used);
 bool suspend_by_hall = false;
 EXPORT_SYMBOL(suspend_by_hall);
 
+// Sync update status with Station touch
+int station_touch_recovery = 0;
+EXPORT_SYMBOL(station_touch_recovery);
+
 struct ec_hid_data {
 	dev_t devt;
 	struct device *dev;
@@ -112,6 +116,29 @@ struct ec_hid_data {
 
 	struct notifier_block display_notifier;  //For drm panel notify
 };
+
+void hid_switch_usb_autosuspend(bool flag){
+	struct hid_device *hdev;
+	struct usb_interface *intf;
+
+	if (g_hidraw == NULL || g_hid_data->lock) {
+		//printk("[EC_HID] g_hidraw is NULL or lock %d\n", g_hid_data->lock);
+		return;
+	}
+
+	hdev = g_hidraw->hid;
+	intf = to_usb_interface(hdev->dev.parent);
+
+	printk("[EC_HID] hid_swithc_usb_autosuspend %d\n", flag);
+	if(flag) {
+		usb_enable_autosuspend(interface_to_usbdev(intf));
+	}else {
+		usb_disable_autosuspend(interface_to_usbdev(intf));
+	}
+
+	return;
+}
+EXPORT_SYMBOL_GPL(hid_switch_usb_autosuspend);
 
 static int check_panel(struct device_node *np)
 {
