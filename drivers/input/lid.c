@@ -74,7 +74,12 @@ static irqreturn_t lid_interrupt_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 //TODO for DP function
-//extern void asus_dp_change_state(bool mode, int type);
+#ifdef ASUS_ZS661KS_PROJECT
+/* ASUS BSP DP +++ */
+extern void asus_dp_change_state(bool mode, int type);
+extern int hid_to_set_station_cover_state(u8 type); // ASUS_BSP Deeo : add for ACCY EC driver
+#endif
+
 static void lid_report_function(struct work_struct *work)
 {
 	struct asustek_lid_drvdata *ddata =
@@ -84,12 +89,18 @@ static void lid_report_function(struct work_struct *work)
 	value = !!gpio_get_value_cansleep(ddata->gpio) ^ ddata->active_low;
 
 //TODO for DP function
-/*	if(value) {	//LID close, value=1
-	    asus_dp_change_state(false, 2);
+#ifdef ASUS_ZS661KS_PROJECT
+	/* ASUS BSP DP +++ */
+	if(value) {	//LID close, value=1
+	    asus_dp_change_state(false, 0);
+	    hid_to_set_station_cover_state(1);
 	}else {		//LID open, value=0
-	    asus_dp_change_state(true, 2);
+	    asus_dp_change_state(true, 0);
+	    hid_to_set_station_cover_state(0);
 	}
-*/
+	/* ASUS BSP DP --- */
+#endif
+
 	input_report_switch(ddata->input, SW_LID, value);
 	input_sync(ddata->input);
 	//bat_get_hal_sensor_status(value);//Notify the status of hall-sensor to charger

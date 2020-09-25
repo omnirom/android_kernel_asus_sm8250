@@ -367,6 +367,15 @@ static const struct attribute_group gpio_keys_attr_group = {
 unsigned int vol_up_press = 0;
 extern unsigned int vol_down_press_count;
 unsigned int b_press = 0;
+
+#ifdef ASUS_ZS661KS_PROJECT
+// Touch
+extern unsigned int vol_down_press;
+unsigned int vol_up_press_count = 0;
+extern void setting_touch_print_count(int count);
+extern bool enable_touch_debug;
+#endif
+
 static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 {
 	const struct gpio_keys_button *button = bdata->button;
@@ -382,15 +391,34 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	}
 	if(type == EV_KEY) {
 		if(button->code == 115) {
-			printk("[keypad][gpio_keys.c] keycode=%d, state=%s\n", button->code, state?"press":"release");
-			if (state > 0) {
-				vol_up_press = 1;
-			}
-			else {
-				vol_up_press = 0;
-				if(vol_down_press_count != 0) {
-					printk("[keypad][gpio_keys.c] vol down (keycode=114) count = %d\n", vol_down_press_count);
-					vol_down_press_count = 0;
+#ifdef ASUS_ZS661KS_PROJECT
+			if (vol_down_press) {
+				if (state > 0)
+					vol_up_press_count++;
+				printk("[GTP]vol_up_press_count = %d\r\n",vol_up_press_count);
+				if (vol_up_press_count == 10) {
+					if(enable_touch_debug == true) {
+						printk("[GTP] change touch print count(1)\n");
+						setting_touch_print_count(1);
+					} else {
+						printk("[GTP] Please enable logcat service\n");
+						vol_up_press_count = 0;
+					}
+				}
+			} else {
+#endif
+				printk("[keypad][gpio_keys.c] keycode=%d, state=%s\n", button->code, state?"press":"release");
+				if (state > 0) {
+					vol_up_press = 1;
+				}
+				else {
+					vol_up_press = 0;
+					if(vol_down_press_count != 0) {
+						printk("[keypad][gpio_keys.c] vol down (keycode=114) count = %d\n", vol_down_press_count);
+						vol_down_press_count = 0;
+#ifdef ASUS_ZS661KS_PROJECT
+					}
+#endif
 				}
 			}
 		}

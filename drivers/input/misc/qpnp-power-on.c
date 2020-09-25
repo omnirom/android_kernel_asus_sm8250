@@ -1223,6 +1223,12 @@ extern void set_dload_mode(int on);
 extern void msm_set_restart_mode(int mode);
 extern int download_mode;
 extern int dload_type;
+
+#ifdef ASUS_ZS661KS_PROJECT
+// Touch
+unsigned int vol_down_press = 0;
+extern unsigned int vol_up_press_count;
+#endif
 static int qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 {
 	struct qpnp_pon_config *cfg = NULL;
@@ -1316,8 +1322,23 @@ static int qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 				set_dload_mode(dload_type);
 				msm_set_restart_mode(download_mode);
 				panic("special panic...\r\n");
+#ifdef ASUS_ZS661KS_PROJECT
+			}
+		} else {
+			// Touch debug
+			if (key_status > 0) {
+				vol_down_press = 1;
+			}
+			else {
+				vol_down_press = 0;
+				if(vol_up_press_count != 0) {
+					printk("[keypad][qpnp-power-on.c] vol up (keycode=115) count = %d\n", vol_up_press_count);
+					vol_up_press_count = 0;
+				}
+#else
 			#endif
 			//ABSP+-
+#endif
 			}
 		}
 	}
