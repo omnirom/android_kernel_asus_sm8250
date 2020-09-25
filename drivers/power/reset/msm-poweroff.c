@@ -63,7 +63,7 @@ static void scm_disable_sdi(void);
  * There is no API from TZ to re-enable the registers.
  * So the SDI cannot be re-enabled when it already by-passed.
  */
-int download_mode = 1;
+
 static struct kobject dload_kobj;
 
 static int in_panic;
@@ -80,6 +80,41 @@ static void *emergency_dload_mode_addr;
 static bool scm_dload_supported;
 
 static bool force_warm_reboot;
+
+#ifdef FORCE_RAMDUMP_FEATURE
+void set_dload_mode(int on);
+int g_force_ramdump = 0;
+int download_mode = 1;
+static int set_download_mode(char *str)
+{
+	if ( strcmp("y", str) == 0 || strcmp("Y", str) == 0 ) {
+		download_mode = 1;
+		g_force_ramdump = 1;
+		set_dload_mode(download_mode);
+	} else
+		download_mode = 0;
+
+	printk("download mode = %d\n",download_mode);
+	return 0;
+}
+__setup("RDUMP=", set_download_mode);
+static int set_download_mode_by_uart(char *str)
+{
+	if ( strcmp("y", str) == 0 || strcmp("Y", str) == 0 ) {
+		download_mode = 1;
+		set_dload_mode(download_mode);
+		g_force_ramdump = 1;
+	} else
+		download_mode = 0;
+
+	printk("download mode = %d\n",download_mode);
+	return 0;
+}
+
+__setup("UART=", set_download_mode_by_uart);
+#else
+int download_mode = 1;
+#endif
 
 /* interface for exporting attributes */
 struct reset_attribute {
@@ -709,6 +744,13 @@ static int msm_restart_probe(struct platform_device *pdev)
 
 	pm_power_off = do_msm_poweroff;
 	arm_pm_restart = do_msm_restart;
+
+#ifdef FORCE_RAMDUMP_FEATURE
+	if(g_force_ramdump) {
+		download_mode = 1;
+		dload_type = SCM_DLOAD_FULLDUMP;
+	}
+#endif
 
 	if (scm_is_call_available(SCM_SVC_PWR, SCM_IO_DISABLE_PMIC_ARBITER) > 0)
 		scm_pmic_arbiter_disable_supported = true;
