@@ -19,7 +19,7 @@ static u32 g_blue;
 static u32 g_mode;
 static u32 g_speed;
 static u32 g_led_on;
-
+static u32 g_led2_on;
 struct ene_8k41_platform_data {
 
 	u8 fw_version;

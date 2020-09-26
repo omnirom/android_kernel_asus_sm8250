@@ -18,6 +18,8 @@
 #include <linux/completion.h>
 //#include <linux/msm_drm_notify.h>
 
+// For Charger mode
+extern bool g_Charger_mode;
 
 #define RGB_MAX 21
 extern uint8_t gDongleType;
@@ -2767,9 +2769,14 @@ static int ene_6k582_probe(struct i2c_client *client, const struct i2c_device_id
 	//int fw_size;
 	struct ene_6k582_platform_data *platform_data;
 	//unsigned char data[4] = {0};
-	
+	unsigned char data[2] = {0};
+	u32 val;
 	printk("[AURA_STATION] ene_6k582_probe.\n");
 
+	if(g_Charger_mode) {
+		printk("[AURA_STATION] In charger mode, stop ene_6k582_probe\n");
+		return 0;
+	}
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		err = -ENODEV;
 	  //goto exit_check_functionality_failed;
@@ -2867,7 +2874,57 @@ static int ene_6k582_probe(struct i2c_client *client, const struct i2c_device_id
     g_speed=-1;
     g_led_on=-1;
     g_led2_on=-1;
-
+// reset all variable
+// reset RGB
+	printk("[AURA_STATION] reset all variables to 0\n");
+	mutex_lock(&g_pdata->ene_mutex);
+	err = ene_6k582_write_bytes(client, 0x8404, 0);
+	if (err !=1)
+		printk("[AURA_STATION] ene_6k582_write_bytes:err %d\n", err);
+	err = ene_6k582_write_bytes(client, 0x8405, 0);
+	if (err !=1)
+		printk("[AURA_STATION] ene_6k582_write_bytes:err %d\n", err);
+	err = ene_6k582_write_bytes(client, 0x8406, 0);
+	if (err !=1)
+		printk("[AURA_STATION] ene_6k582_write_bytes:err %d\n", err);
+	err = ene_6k582_write_bytes(client, 0x8407, 0);
+	if (err !=1)
+		printk("[AURA_STATION] ene_6k582_write_bytes:err %d\n", err);
+	err = ene_6k582_write_bytes(client, 0x8408, 0);
+	if (err !=1)
+		printk("[AURA_STATION] ene_6k582_write_bytes:err %d\n", err);
+	err = ene_6k582_write_bytes(client, 0x8409, 0);
+	if (err !=1)
+		printk("[AURA_STATION] ene_6k582_write_bytes:err %d\n", err);
+// reset led
+	err = ene_6k582_read_bytes(client, 0x840c, data);
+	if (err != 2)
+		printk("[AURA_STATION] led_on_store:err %d\n", err);
+	val = data[0] & 0xFC;
+	err = ene_6k582_write_bytes(client, 0x840c, val);
+	if (err !=1)
+		printk("[AURA_STATION] ene_6k582_write_bytes:err %d\n", err);
+	err = ene_6k582_read_bytes(client, 0x840c, data);
+	if (err != 2)
+		printk("[AURA_STATION] led_on_store:err %d\n", err);
+	val = data[0] & 0xF3;
+	err = ene_6k582_write_bytes(client, 0x840c, val);
+	if (err !=1)
+		printk("[AURA_STATION] ene_6k582_write_bytes:err %d\n", err);
+// reset mode
+	err = ene_6k582_write_bytes(client, 0x8451, 1);
+	if (err !=1)
+		printk("[AURA_STATION] ene_6k582_write_bytes:err %d\n", err);
+//apply			
+	err = ene_6k582_write_bytes(client, 0x8452, 1);
+	if (err !=1){
+		apply_state=-1;
+		printk("[AURA_STATION] ene_6k582_write_bytes:err %d\n", err);
+	}
+				
+	mutex_unlock(&g_pdata->ene_mutex);
+	
+	
 	station_aura_pogo = true;
 	printk("[AURA_STATION] ene_6k582_probe done.\n");
 	///kfree(fw_buf);
@@ -2889,7 +2946,10 @@ static int ene_6k582_remove(struct i2c_client *client)
 {
 	int err = 0;
 	struct ene_6k582_platform_data *platform_data = i2c_get_clientdata(client);
-
+	if(g_Charger_mode) {
+		printk("[AURA_STATION] In charger mode, stop ene_6k582_remove\n");
+		return 0;
+	}
 	if (!station_aura_pogo){
 		printk("[AURA_STATION] ene_6k582_remove : err %d\n", err);
 		return 0;		
@@ -2923,6 +2983,10 @@ int ene_6k582_suspend(struct device *dev)
 	struct ene_6k582_platform_data *platform_data = i2c_get_clientdata(client);
 	u32 val;
 	u32 delay_time=4000; //the time is delay_time*2.5ms,default is 10s.
+	if(g_Charger_mode) {
+		printk("[AURA_STATION] In charger mode, stop ene_6k582_suspend\n");
+		return 0;
+	}
 	if(g_sleep==1){
 		printk("[AURA_STATION] ene_6k582_suspend not sleep,  return\n");
 		return 0;
@@ -2962,6 +3026,10 @@ int ene_6k582_resume(struct device *dev)
 	unsigned char data[2]={0};
 	struct i2c_client *client = to_i2c_client(dev);
 	struct ene_6k582_platform_data *platform_data = i2c_get_clientdata(client);
+	if(g_Charger_mode) {
+		printk("[AURA_STATION] In charger mode, stop ene_6k582_resume\n");
+		return 0;
+	}
 	if(g_sleep==1){
 		printk("[AURA_STATION] ene_6k582_resume not sleep, return\n");
 		return 0;

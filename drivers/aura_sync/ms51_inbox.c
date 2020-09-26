@@ -35,7 +35,9 @@ static u32 g_mode;
 static u32 g_speed;
 static u32 g_led_on;
 static u32 g_led2_on;
-
+static u32 dongle_switch_mode=0;
+// For Charger mode
+extern bool g_Charger_mode;
 /*static int i2c_read_bytes(struct i2c_client *client, char *write_buf, int writelen, char *read_buf, int readlen)
 {
 	struct i2c_msg msgs[2];
@@ -277,7 +279,7 @@ static ssize_t inbox_user_fan(struct device *dev,
 			break;
 		case 1:
 			//printk("[INBOX_FAN] %s : fan_type 1: low +++\n",__func__);
-			tmp = 0x5A;
+			tmp = 0x78;
 			mutex_lock(&g_pdata->ms51_mutex);
 			printk("[INBOX_FAN] user_type 1, pwm : 0x%x\n", tmp);
 			err = ms51_write_bytes(client, 0x6001 ,tmp);
@@ -301,7 +303,7 @@ static ssize_t inbox_user_fan(struct device *dev,
 			break;
 		case 2:
 			//printk("[INBOX_FAN] %s : fan_type 2: medium +++\n",__func__);
-			tmp = 0x69;
+			tmp = 0x82;
 			mutex_lock(&g_pdata->ms51_mutex);
 			printk("[INBOX_FAN] user_type 2, pwm : 0x%x\n", tmp);
 			err = ms51_write_bytes(client, 0x6001 ,tmp);
@@ -327,7 +329,7 @@ static ssize_t inbox_user_fan(struct device *dev,
 			break;
 		case 3:
 			//printk("[INBOX_FAN] %s : fan_type 3: high +++\n",__func__);
-			tmp = 0x78;
+			tmp = 0x8c;
 			mutex_lock(&g_pdata->ms51_mutex);
 			printk("[INBOX_FAN] user_type 3, pwm : 0x%x\n", tmp);
 			err = ms51_write_bytes(client, 0x6001 ,tmp);
@@ -352,7 +354,7 @@ static ssize_t inbox_user_fan(struct device *dev,
 			break;
 		case 4:
 			//printk("[INBOX_FAN] %s : fan_type 4: turbo +++\n",__func__);
-			tmp = 0x82;
+			tmp = 0x96;
 			mutex_lock(&g_pdata->ms51_mutex);
 			printk("[INBOX_FAN] user_type 4, pwm : 0x%x\n", tmp);
 			err = ms51_write_bytes(client, 0x6001 ,tmp);
@@ -431,7 +433,7 @@ static ssize_t inbox_thermal_fan(struct device *dev,
 			break;
 		case 1:
 			//printk("[INBOX_FAN] %s : fan_type 1: low +++\n",__func__);
-			tmp = 0x5A;
+			tmp = 0x78;
 			mutex_lock(&g_pdata->ms51_mutex);
 			printk("[INBOX_FAN] thermal_type 1, pwm : 0x%x\n", tmp);
 			err = ms51_write_bytes(client, 0x6001 ,tmp);
@@ -455,7 +457,7 @@ static ssize_t inbox_thermal_fan(struct device *dev,
 			break;
 		case 2:
 			//printk("[INBOX_FAN] %s : fan_type 2: medium +++\n",__func__);
-			tmp = 0x69;
+			tmp = 0x82;
 			mutex_lock(&g_pdata->ms51_mutex);
 			printk("[INBOX_FAN] thermal_type 2, pwm : 0x%x\n", tmp);
 			err = ms51_write_bytes(client, 0x6001 ,tmp);
@@ -479,7 +481,7 @@ static ssize_t inbox_thermal_fan(struct device *dev,
 			break;
 		case 3:
 			//printk("[INBOX_FAN] %s : fan_type 3: high +++\n",__func__);
-			tmp = 0x78;
+			tmp = 0x8c;
 			mutex_lock(&g_pdata->ms51_mutex);
 			printk("[INBOX_FAN] thermal_type 3, pwm : 0x%x\n", tmp);
 			err = ms51_write_bytes(client, 0x6001 ,tmp);
@@ -503,7 +505,7 @@ static ssize_t inbox_thermal_fan(struct device *dev,
 			break;
 		case 4:
 			//printk("[INBOX_FAN] %s : fan_type 4: turbo +++\n",__func__);
-			tmp = 0x82;
+			tmp = 0x96;
 			mutex_lock(&g_pdata->ms51_mutex);
 			printk("[INBOX_FAN] thermal_type 4, pwm : 0x%x\n", tmp);
 			err = ms51_write_bytes(client, 0x6001 ,tmp);
@@ -954,7 +956,7 @@ static ssize_t led_color_show(struct device *dev, struct device_attribute *attr,
 static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct i2c_client *client = to_i2c_client(dev->parent);
-	//struct ms51_platform_data *platform_data = i2c_get_clientdata(client);
+	struct ms51_platform_data *platform_data = i2c_get_clientdata(client);
 	unsigned char rgb[RGB_MAX] = {0};
 	//unsigned char tokenized_data[22] = {0};
 	unsigned char rainbow_mode = 0;
@@ -1054,7 +1056,7 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 			rainbow_mode = 0xF;
 			break;
 	}
-
+	platform_data->current_mode = (u8)mode2;
 	switch(rainbow_mode){
 		case 0:  //mode 0
 			mutex_lock(&g_pdata->ms51_mutex);
@@ -1604,9 +1606,11 @@ static ssize_t fw_ver_show(struct device *dev, struct device_attribute *attr,cha
 
 	mutex_lock(&g_pdata->ms51_mutex);
 	err = ms51_read_words(client, 0xCB01, data);
-	if (err != 1)
+	if (err != 1){
 		printk("[AURA_MS51_INBOX] fw_ver_show:err %d\n", err);
-
+		mutex_unlock(&g_pdata->ms51_mutex);
+		return snprintf(buf, PAGE_SIZE,"i2c_error\n");
+	}
 	mutex_unlock(&g_pdata->ms51_mutex);
 	ver_major = data[0];
 	ver_minor = data[1];
@@ -2111,7 +2115,7 @@ static ssize_t unique_id_show(struct device *dev, struct device_attribute *attr,
 	unsigned char cmd[2] = {0};
 	struct i2c_msg msgs;
 
-	cmd[0] = 0xA0;
+	cmd[0] = 0xCB;
 	cmd[1] = 0x03;
 
 	mutex_lock(&g_pdata->ms51_mutex);
@@ -2236,6 +2240,33 @@ static ssize_t HWID_show(struct device *dev, struct device_attribute *attr,char 
 	return snprintf(buf, PAGE_SIZE,"%d%d\n", p15[0], p17[0]);
 }
 
+static ssize_t set_dongle_switch_mode(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	u32 val;
+	ssize_t ret;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return count;
+
+	if(val>0){
+		printk("[AURA_MS51_INBOX] set dongle switch mode 1\n");
+		dongle_switch_mode = 1;
+	}else{
+		printk("[AURA_MS51_INBOX] set dongle switch mode 0\n");
+		dongle_switch_mode = 0;
+	}
+	return count;
+}
+
+static ssize_t get_dongle_switch_mode(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	if(dongle_switch_mode>0)
+		return snprintf(buf, PAGE_SIZE,"%d\n", 1);
+	else
+		return snprintf(buf, PAGE_SIZE,"%d\n", 0);
+
+}
 static DEVICE_ATTR(red_pwm, 0664, red_pwm_show, red_pwm_store);
 static DEVICE_ATTR(green_pwm, 0664, green_pwm_show, green_pwm_store);
 static DEVICE_ATTR(blue_pwm, 0664, blue_pwm_show, blue_pwm_store);
@@ -2262,6 +2293,7 @@ static DEVICE_ATTR(VDD, 0664, ms51_vdd_show, ms51_vdd_store);
 static DEVICE_ATTR(led_color, 0664, led_color_show,led_color_store);
 static DEVICE_ATTR(mode2, 0664, mode2_show,mode2_store);
 static DEVICE_ATTR(HWID, 0664, HWID_show,NULL);
+static DEVICE_ATTR(dongle_switch_mode, 0664, get_dongle_switch_mode, set_dongle_switch_mode);
 
 static struct attribute *pwm_attrs[] = {
 	&dev_attr_red_pwm.attr,
@@ -2290,6 +2322,7 @@ static struct attribute *pwm_attrs[] = {
 	&dev_attr_led_color.attr,
 	&dev_attr_mode2.attr,
 	&dev_attr_HWID.attr,
+	&dev_attr_dongle_switch_mode.attr,
 	NULL
 };
 
@@ -2398,7 +2431,11 @@ static int ms51_probe(struct i2c_client *client, const struct i2c_device_id *id)
 #if FAN_ADD
 	int i = 0;
 #endif 
-
+	if(g_Charger_mode) {
+		printk("[AURA_MS51_INBOX] In charger mode, stop ms51_probe\n");
+		return 0;
+	}
+	
 	buf_cmd = kmalloc(sizeof(unsigned char)*49, GFP_DMA);
 	if (!buf_cmd) {
 		printk("unable to allocate buf_cmd memory\n");
@@ -2628,7 +2665,10 @@ static int ms51_remove(struct i2c_client *client)
 #if FAN_ADD
 	int i = 0;
 	struct device *dev = &client->dev;
-
+	if(g_Charger_mode) {
+		printk("[AURA_MS51_INBOX] In charger mode, stop ms51_remove\n");
+		return 0;
+	}
 	//remove this for inbox have been removed already so that i2c cmd woulf fail.
 	/*if (get_fan_vdd(client)== 1) {
 		
@@ -2688,10 +2728,13 @@ static int ms51_remove(struct i2c_client *client)
 int ms51_inbox_suspend(struct device *dev)
 {
 	int err = 0;
+	if(g_Charger_mode) {
+		printk("[AURA_MS51_INBOX] In charger mode, stop ms51_suspend\n");
+		return 0;
+	}
+	printk("[AURA_MS51_INBOX] ms51_inbox_suspend : current_mode : 0x%x, dongle_switch_mode : %d\n", g_pdata->current_mode, dongle_switch_mode);
 
-	printk("[AURA_MS51_INBOX] ms51_inbox_suspend : current_mode : 0x%x\n", g_pdata->current_mode);
-
-	if(!g_pdata->current_mode){
+	if(!g_pdata->current_mode && !dongle_switch_mode){
 		printk("[AURA_MS51_INBOX] Disable VDD.\n");
 		if ( gpio_is_valid(g_pdata->ms51_enable_pin) )
 			gpio_set_value(g_pdata->ms51_enable_pin, 0);
@@ -2705,10 +2748,13 @@ int ms51_inbox_suspend(struct device *dev)
 int ms51_inbox_resume(struct device *dev)
 {
 	int err = 0;
+	if(g_Charger_mode) {
+		printk("[AURA_MS51_INBOX] In charger mode, stop ms51_resume\n");
+		return 0;
+	}
+	printk("[AURA_MS51_INBOX] ms51_inbox_resume : current_mode : 0x%x, dongle_switch_mode : %d\n", g_pdata->current_mode, dongle_switch_mode);
 
-	printk("[AURA_MS51_INBOX] ms51_inbox_resume : current_mode : 0x%x\n", g_pdata->current_mode);
-
-	if(!g_pdata->current_mode){
+	if(!g_pdata->current_mode && !dongle_switch_mode){
 		printk("[AURA_MS51_INBOX] Enable VDD.\n");
 		if ( gpio_is_valid(g_pdata->ms51_enable_pin) )
 			gpio_set_value(g_pdata->ms51_enable_pin, 1);

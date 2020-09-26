@@ -30,6 +30,9 @@ extern enum DEVICE_HWID g_ASUS_hwID;
 extern void bumper_vdd_switch(u32 val);
 extern int lid2_status;
 
+// For Charger mode
+extern bool g_Charger_mode;
+
 #define WAKELOCK_HOLD_TIME 200 /* in ms */
 static struct wakeup_source ene_wakelock;
 
@@ -695,7 +698,7 @@ static ssize_t apply_store(struct device *dev, struct device_attribute *attr, co
 	mutex_lock(&g_pdata->ene_mutex);
 	if (val > 0){
 		//printk("[AURA_SYNC] Send apply. RGB:%d %d %d, mode:%d, speed:%d, led_on:%d, lid2_status:%d, bumper_enable %d\n", g_red, g_green, g_blue, g_mode, g_speed, g_led_on, lid2_status, bumper_enable);
-		printk("[AURA_SYNC] Send apply. RGB:%d %d %d, mode:%d, speed:%d, led_on:%d\n", g_red, g_green, g_blue, g_mode, g_speed, g_led_on);
+		printk("[AURA_SYNC] Send apply. RGB:%d %d %d, mode:%d, speed:%d, led_on:%d, led2_on:%d\n", g_red, g_green, g_blue, g_mode, g_speed, g_led_on, g_led2_on);
 		err = ene_8k41_write_bytes(client, 0x802F, 0x1);
 		if (err !=1)
 			printk("[AURA_SYNC] ene_8k41_write_bytes:err %d\n", err);
@@ -1113,13 +1116,15 @@ static ssize_t led_on_store(struct device *dev, struct device_attribute *attr, c
 				printk("[AURA_SYNC] ene_8k41_write_bytes:err %d\n", err);
 		}
 
-		if (platform_data->aura_front_en != -ENOENT){
-			printk("[AURA_SYNC] LED power off.\n");
-			err = gpio_direction_output(platform_data->aura_front_en, 0);
-			if (err)
-				printk("[AURA_SYNC] aura_front_en output high, err %d\n", err);
-		}else{
-			printk("[AURA_SYNC] platform_data->aura_front_en NOT EXIST!!\n");
+		if (g_led2_on == 0) {
+			if (platform_data->aura_front_en != -ENOENT){
+				printk("[AURA_SYNC] LED power off.\n");
+				err = gpio_direction_output(platform_data->aura_front_en, 0);
+				if (err)
+					printk("[AURA_SYNC] aura_front_en output high, err %d\n", err);
+			}else{
+				printk("[AURA_SYNC] platform_data->aura_front_en NOT EXIST!!\n");
+			}
 		}
 
 
@@ -1146,14 +1151,42 @@ static ssize_t led_on_show(struct device *dev, struct device_attribute *attr,cha
 
 static ssize_t led2_on_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
+	struct i2c_client *client = to_i2c_client(dev->parent);
+	struct ene_8k41_platform_data *platform_data = i2c_get_clientdata(client);
 	u32 val;
 	ssize_t ret;
-
+	int err = 0;
 	__pm_wakeup_event(&ene_wakelock, WAKELOCK_HOLD_TIME);
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
 		return ret;
+
+	if(val>0) {
+		g_led2_on = 1;
+
+		//printk("[AURA_SYNC] LED ON\n");
+		if (platform_data->aura_front_en != -ENOENT){
+			printk("[AURA_SYNC] LED power on.\n");
+			err = gpio_direction_output(platform_data->aura_front_en, 1);
+			if (err)
+				printk("[AURA_SYNC] aura_front_en output high, err %d\n", err);
+		}else{
+			printk("[AURA_SYNC] platform_data->aura_front_en NOT EXIST!!\n");
+		}
+	}else{
+		g_led2_on = 0;
+		if (g_led_on == 0) {
+			if (platform_data->aura_front_en != -ENOENT){
+				printk("[AURA_SYNC] LED power off.\n");
+				err = gpio_direction_output(platform_data->aura_front_en, 0);
+				if (err)
+					printk("[AURA_SYNC] aura_front_en output high, err %d\n", err);
+			}else{
+				printk("[AURA_SYNC] platform_data->aura_front_en NOT EXIST!!\n");
+			}
+		}
+	}
 
 	bumper_switch(val);
 
@@ -1867,6 +1900,11 @@ static int ene_8k41_probe(struct i2c_client *client, const struct i2c_device_id 
 	
 	printk("[AURA_SYNC] ene_8k41_probe.\n");
 
+	if(g_Charger_mode) {
+		printk("[AURA_SYNC] In charger mode, stop ene_8k41_probe\n");
+		return 0;
+	}
+
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		err = -ENODEV;
 	goto exit_check_functionality_failed;
@@ -2034,6 +2072,7 @@ if (platform_data->aura_front_en != -ENOENT )
 	g_mode = 0;
 	g_speed = 0;
 	g_led_on = 0;
+	g_led2_on = 0;
 
 	printk("[AURA_SYNC] ene_8k41_probe done.\n");
 	return 0;
@@ -2094,6 +2133,11 @@ int ene_8k41_suspend(struct device *dev)
 {
 	int err = 0;
 
+	if(g_Charger_mode) {
+		printk("[AURA_SYNC] In charger mode, stop ene_8k41_suspend\n");
+		return 0;
+	}
+
 	printk("[AURA_SYNC] ene_8k41_suspend : current_mode : 0x%x , bumper_enable %d\n", g_pdata->current_mode, bumper_enable);
 
 	if(!g_pdata->current_mode){
@@ -2111,6 +2155,7 @@ int ene_8k41_suspend(struct device *dev)
 		g_mode = 0;
 		g_speed = 0;
 		g_led_on = 0;
+		g_led2_on = 0;
 	}
 
 	g_pdata->suspend_state = true;
@@ -2121,6 +2166,11 @@ int ene_8k41_suspend(struct device *dev)
 int ene_8k41_resume(struct device *dev)
 {
 	int err = 0;
+
+	if(g_Charger_mode) {
+		printk("[AURA_SYNC] In charger mode, stop ene_8k41_resume\n");
+		return 0;
+	}
 
 	printk("[AURA_SYNC] ene_8k41_resume : current_mode : 0x%x, bumper_enable %d\n", g_pdata->current_mode, bumper_enable);
 
