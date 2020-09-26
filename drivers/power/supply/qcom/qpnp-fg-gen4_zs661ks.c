@@ -260,7 +260,7 @@ extern int smblib_set_usb_suspend(struct smb_charger *chg, bool suspend);
 extern int hid_suspend_vote(int id);
 //extern int hid_vote_register(char *name); //Not used now
 //extern int hid_vote_unregister(int id, char *name); //Not used now
-extern int hid_to_set_ultra_power_mode(u8 type); // 1:in 0:out
+//extern int hid_to_set_ultra_power_mode(u8 type); // 1:in 0:out
 extern bool is_Station_PB; //station is in power bank
 //[---] LiJen implement power bank and balance mode
 
@@ -845,7 +845,7 @@ static int fg_gen4_get_batt_id(struct fg_gen4_chip *chip)
 #define BATT_ID_CRITERIA	51000
 #define BATT_TYPE_OBIWAN_4P35V	"c11p1901_5800mah_jan22nd2020_4p35v"
 #define BATT_TYPE_DEFAULT_4P35V	"alium_860_89032_0000_3600mah_sept24th2018"
-#define BATT_MODELNAME_OBIWAN 	"C11p1901"
+#define BATT_MODELNAME_OBIWAN 	"C11p1903"
 #define BATT_MODELNAME_DEFAULT 	"alium_860"
 #define BATT_ID_51K_INDEX		1
 #define BATT_ID_100K_INDEX		2
@@ -2757,6 +2757,24 @@ static void fg_gen4_post_profile_load(struct fg_gen4_chip *chip)
 
 }
 
+int force_disable_side_load(void){
+    u8 val, mask;
+    int rc;
+
+    /* Clear side loading for voltage and current */
+    val = 0;
+    mask = BIT(0);
+    pr_err("LiJen %s Clear side loading\n",__func__);
+    rc = fg_sram_masked_write(g_fgDev, SYS_CONFIG_WORD,
+            SYS_CONFIG_OFFSET, mask, val, FG_IMA_DEFAULT);
+    if (rc < 0) {
+        pr_err("Error in clearing SYS_CONFIG_WORD[0], rc=%d\n",
+            rc);
+        return rc;
+    }
+    return 0;
+}
+
 static void profile_load_work(struct work_struct *work)
 {
 	struct fg_dev *fg = container_of(work,
@@ -2787,8 +2805,10 @@ static void profile_load_work(struct work_struct *work)
 	if (!fg->profile_available)
 		goto out;
 
-	if (!is_profile_load_required(chip))
+	if (!is_profile_load_required(chip)){
+		force_disable_side_load();
 		goto done;
+	}
 
 	if (!chip->dt.multi_profile_load) {
 		clear_cycle_count(chip->counter);
@@ -4192,7 +4212,7 @@ static int fg_gen4_charge_full_update(struct fg_dev *fg)
 			fg_dbg(fg, FG_STATUS, "Terminated charging @ SOC%d\n",
 				msoc);
 		}
-	} else if ((msoc_raw <= recharge_soc || !fg->charge_done)
+	} else if ((msoc_raw <= recharge_soc)
 			&& fg->charge_full) {
 		if (chip->dt.linearize_soc) {
 			fg->delta_soc = FULL_CAPACITY - msoc;
@@ -8330,8 +8350,8 @@ static void asus_set_charger_active(void) //PMI Active Mode
 	smblib_set_usb_suspend(smbchg_dev, false);
 
 	//set station CC = DRP, disable 5V 8mA
-	if (force_station_ultra_flag)
-		hid_to_set_ultra_power_mode(0);
+	//if (force_station_ultra_flag)
+	//	hid_to_set_ultra_power_mode(0);
 
 	BAT_DBG("%s\n", __func__);
 }
@@ -8353,8 +8373,8 @@ static void asus_set_charger_suspend(void) //PMI Suspend Mode
 	smblib_set_usb_suspend(smbchg_dev, true);
 
 	//set station CC = DRP, enable 5V 8mA
-	if (force_station_ultra_flag)
-		hid_to_set_ultra_power_mode(0);
+	//if (force_station_ultra_flag)
+	//	hid_to_set_ultra_power_mode(0);
 
 	BAT_DBG("%s\n", __func__);
 }
@@ -8376,8 +8396,8 @@ static void asus_set_charger_suspend(void) //PMI Suspend Mode
 	smblib_set_usb_suspend(smbchg_dev, true);
 
 	//set station CC = UFP, enable 5V 8mA
-	if (force_station_ultra_flag)
-		hid_to_set_ultra_power_mode(1);
+	//if (force_station_ultra_flag)
+	//	hid_to_set_ultra_power_mode(1);
 
 	//vote HID suspend
 	hid_suspend_vote(g_fgDev->hid_suspend_id);

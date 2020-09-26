@@ -4263,11 +4263,6 @@ static ssize_t boot_completed_store(struct device *dev,
 
 	tmp = buf[0] - 48;
 
-	if (boot_completed_flag == 0 && tmp == 1) {	// ASUS BSP : Reset smart_stop_flag and smartchg_slow_flag
-		smartchg_stop_flag = 0;
-		smartchg_slow_flag = 0;
-	}
-
 	if (tmp == 0) {
 		boot_completed_flag = false;
 		CHG_DBG("boot_completed_flag = 0\n");
@@ -4606,11 +4601,40 @@ static ssize_t force_usb_mux_store(struct device *dev, struct device_attribute *
 		if (rc)
 			CHG_DBG_E("failed to control PMI_MUX_EN\n");
 	}
+	else if (g_force_usb_mux == 1) {
+		usb2_mux1_en = 1;
+		pmi_mux_en = 0;
+		CHG_DBG("g_force_usb_mux is 0\n");
+		rc = gpio_direction_output(global_gpio->USB2_MUX1_EN, usb2_mux1_en);
+		if (rc)
+			CHG_DBG_E("failed to control USB2_MUX1_EN\n");
+
+		rc = gpio_direction_output(global_gpio->PMI_MUX_EN, pmi_mux_en);
+		if (rc)
+			CHG_DBG_E("failed to control PMI_MUX_EN\n");
+	}
+	else if (g_force_usb_mux == 0) {
+		usb2_mux1_en = 0;
+		pmi_mux_en = 0;
+		CHG_DBG("g_force_usb_mux is 0\n");
+		rc = gpio_direction_output(global_gpio->USB2_MUX1_EN, usb2_mux1_en);
+		if (rc)
+			CHG_DBG_E("failed to control USB2_MUX1_EN\n");
+
+		rc = gpio_direction_output(global_gpio->PMI_MUX_EN, pmi_mux_en);
+		if (rc)
+			CHG_DBG_E("failed to control PMI_MUX_EN\n");
+	}
+
 	return count;
 }
 
 static ssize_t force_usb_mux_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
+	CHG_DBG("usb2_mux1_en : %d\n", gpio_get_value_cansleep(global_gpio->USB2_MUX1_EN));
+
+	CHG_DBG("pmi_mux_en : %d\n", gpio_get_value_cansleep(global_gpio->PMI_MUX_EN));
+
 	return sprintf(buf, "g_force_usb_mux : %d\n", g_force_usb_mux);
 }
 //[---]Open an interface to change the specified usb_mux value
@@ -4723,6 +4747,7 @@ static ssize_t smartchg_stop_charging_store(struct device *dev,
 	return len;
 }
 
+extern void pca9468_enable_slow_charging(bool enable);
 static ssize_t smartchg_stop_charging_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d\n", smartchg_stop_flag);
@@ -4745,6 +4770,7 @@ static ssize_t smartchg_slow_charging_store(struct device *dev,
 		jeita_rule();
 	}
 
+	pca9468_enable_slow_charging(tmp);
 	return len;
 }
 
@@ -5039,7 +5065,7 @@ static int pogo_detect_notifier (struct notifier_block *nb, unsigned long val, v
 			}
 			//[+++] Send EXTCON_USB when ACCY remove & BTM SDP/CDP attached
 			fg_station_attach_notifier(false);
-//todo porting			asus_reset_station_para();
+			asus_reset_station_para();
 			break;
 		case INBOX:
 		case STATION:
@@ -5441,7 +5467,7 @@ static int smb5_probe(struct platform_device *pdev)
 				rc);
 		goto cleanup;
 	}
-	chg->invalid_audiodongle_extcon->fnode_name = "invalid_audiodongle";
+	chg->invalid_audiodongle_extcon->fnode_name = "invalid_dongle";
 
 	rc = extcon_dev_register(chg->invalid_audiodongle_extcon);
 	if (rc < 0) {
