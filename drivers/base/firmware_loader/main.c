@@ -283,6 +283,9 @@ static void free_fw_priv(struct fw_priv *fw_priv)
 static char fw_path_para[256];
 static const char * const fw_path[] = {
 	fw_path_para,
+#ifdef ASUS_ZS661KS_PROJECT
+	"/data/vendor/BBY",
+#endif
 	"/lib/firmware/updates/" UTS_RELEASE,
 	"/lib/firmware/updates",
 	"/lib/firmware/" UTS_RELEASE,
@@ -331,34 +334,6 @@ fw_get_filesystem_firmware(struct device *device, struct fw_priv *fw_priv)
 	path = __getname();
 	if (!path)
 		return -ENOMEM;
-
-#ifdef ASUS_ZS661KS_PROJECT
-	if (!strncmp(fw_priv->fw_name, "cvpss.m", 7)
-		|| !strncmp(fw_priv->fw_name, "cvpss.b", 7)
-		|| !strncmp(fw_priv->fw_name, "goodix_9896_cfg_group", 21)
-		|| !strncmp(fw_priv->fw_name, "ipa_fws.m", 9)
-		|| !strncmp(fw_priv->fw_name, "ipa_fws.b", 9)
-		|| !strncmp(fw_priv->fw_name, "ipa_uc.m", 8)
-		|| !strncmp(fw_priv->fw_name, "ipa_uc.b", 8)
-		|| !strncmp(fw_priv->fw_name, "npu.m", 5)
-		|| !strncmp(fw_priv->fw_name, "npu.b", 5)
-		|| !strncmp(fw_priv->fw_name, "CAMERA_ICP.elf", 14)
-		|| !strncmp(fw_priv->fw_name, "a650_seq.fw", 11)
-		|| !strncmp(fw_priv->fw_name, "a650_gmu.bin", 12)
-		|| !strncmp(fw_priv->fw_name, "sdx55m/sbl1.mbn", 15)
-		|| !strncmp(fw_priv->fw_name, "tfa98xx.cnt", 11)
-		|| !strncmp(fw_priv->fw_name, "a650_sqe.fw", 11)
-		|| !strncmp(fw_priv->fw_name, "a650_zap.mdt", 12)
-		|| !strncmp(fw_priv->fw_name, "a650_zap.b", 10)
-		|| !strncmp(fw_priv->fw_name, "venus.m", 7)
-		|| !strncmp(fw_priv->fw_name, "venus.b", 7)
-		|| !strncmp(fw_priv->fw_name, "WCNSS_qcom_cfg.ini", 18)
-		|| !strncmp(fw_priv->fw_name, "wlan/qca_cld/wlan_mac.bin", 25)
-	) {
-		dev_warn(device, "Force falling back to syfs for %s\n",fw_priv->fw_name);
-		return -ENOENT;
-	}
-#endif //#ifdef ASUS_ZS661KS_PROJECT
 
 	for (i = 0; i < ARRAY_SIZE(fw_path); i++) {
 		/* skip the unset customized path */
