@@ -62,8 +62,8 @@
 #define GOODIX_PID_MAX_LEN		8
 #define GOODIX_VID_MAX_LEN		8
 // ASUS_BSP +++ Touch
-#define GOODIX_DEFAULT_CFG_NAME		"goodix_9896_config.cfg"
-#define GOODIX_YODA_CFG_NAME		"goodix_station_config.cfg" //9886
+#define GOODIX_9896_CFG_NAME		"goodix_9896_config_station.cfg"
+#define GOODIX_9886_CFG_NAME		"goodix_9886_config_station.cfg" //9886
 // ASUS_BSP --- Touch
 #define IC_TYPE_NONE			0
 #define IC_TYPE_NORMANDY		1
@@ -226,6 +226,7 @@ enum ts_notify_event {
 	NOTIFY_ESD_ON,
 	NOTIFY_CFG_BIN_FAILED,
 	NOTIFY_CFG_BIN_SUCCESS,
+	NOTIFY_FWUPDATE_PROGRESS,
 };
 
 enum touch_point_status {
@@ -680,7 +681,7 @@ static inline u32 checksum_be32(u8 *data, u32 size)
 
 //#define CONFIG_GOODIX_DEBUG
 /* log macro */
-#define ts_info(fmt, arg...)	pr_err("[GTP-INF][station][%s:%d] "fmt"\n", __func__, __LINE__, ##arg)
+#define ts_info(fmt, arg...)	pr_info("[GTP-INF][station][%s:%d] "fmt"\n", __func__, __LINE__, ##arg)
 #define	ts_err(fmt, arg...)	pr_err("[GTP-ERR][station][%s:%d] "fmt"\n", __func__, __LINE__, ##arg)
 #define boot_log(fmt, arg...)	g_info(fmt, ##arg)
 #ifdef CONFIG_GOODIX_DEBUG

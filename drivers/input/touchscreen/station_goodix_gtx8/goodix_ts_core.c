@@ -46,8 +46,8 @@ extern int ec_i2c_set_gpio(u8 gpio, u8 value);
 
 static int goodix_ts_remove(struct platform_device *pdev);
 int goodix_start_later_init(struct goodix_ts_core *ts_core);
+void exit_init(void);
 void goodix_ts_dev_release(void);
-
 // ASUS_BSP +++ Touch
 static int print_touch_count_max;
 bool GoodixTSEnTimestamp = false;
@@ -55,7 +55,6 @@ bool GoodixTSEnTimestampDebug = false;
 // ASUS_BSP --- Touch
 
 struct goodix_module goodix_modules;
-
 
 extern int goodix_fwu_module_init(void);
 extern int goodix_i2c_init(void);
@@ -73,6 +72,13 @@ extern int check_dt(void);
 int goodix_station_ts_success = 0;
 int goodix_ts_fw_update = 0;
 extern uint8_t gDongleType;
+extern int Station_HWID;
+extern int fw_update_count;
+int update_progress = 0;
+int drm_registed = 0;
+int input_dev_add = 0;
+extern int station_touch_recovery;
+extern bool cfg_runing;
 
 /**
  * __do_register_ext_module - register external module
@@ -595,9 +601,8 @@ static ssize_t goodix_ts_send_cfg_store(struct device *dev,
 	int en, r;
 	const struct firmware *cfg_img;
 	struct goodix_ts_config *config = NULL;
-// ASUS_BSP +++ Touch
+
 	char cfg_name[32] = {0x00};
-// ASUS_BSP --- Touch
 
 	if (sscanf(buf, "%d", &en) != 1)
 		return -EINVAL;
@@ -608,13 +613,13 @@ static ssize_t goodix_ts_send_cfg_store(struct device *dev,
 	disable_irq(core_data->irq);
 
 	/*request configuration*/
-// ASUS_BSP +++ Touch
-//	if (asus_var_panel_stage[0]!='B'){
-		strlcpy(cfg_name, GOODIX_YODA_CFG_NAME, sizeof(cfg_name));
-/*	}else{
-		strlcpy(cfg_name, GOODIX_DEFAULT_CFG_NAME, sizeof(cfg_name));
-	}
-*/
+
+        if (Station_HWID == 3){
+	    strlcpy(cfg_name, GOODIX_9896_CFG_NAME, sizeof(cfg_name));	  
+	} else {
+	    strlcpy(cfg_name, GOODIX_9886_CFG_NAME, sizeof(cfg_name));
+	}	
+	
 	r = request_firmware(&cfg_img, cfg_name, dev);
 	if (r < 0) {
 		ts_err("cfg file [%s] not available,errno:%d",
@@ -622,7 +627,7 @@ static ssize_t goodix_ts_send_cfg_store(struct device *dev,
 		goto exit;
 	} else
 		ts_info("cfg file [%s] is ready", cfg_name);
-// ASUS_BSP --- Touch
+
 	config = kzalloc(sizeof(*config), GFP_KERNEL);
 	if (config == NULL)
 		goto exit;
@@ -946,18 +951,30 @@ static ssize_t goodix_ts_fw_update_store(struct device *dev,
 		const char *buf,
 		size_t count)
 {
-	int en;
-
-	if (sscanf(buf, "%d", &en) != 1)
+	int en , r;
+        r = sscanf(buf, "%d", &en);
+	if (r < 0)
 		return -EINVAL;
-
-	if (en) {
-	  	ts_info("Register FW update module");
-		goodix_ts_fw_update = 1;
-		goodix_fwu_module_init();
+        ts_info("Register FW update module %d",en);
+	if (en == 1 && (goodix_ts_fw_update == 0)) {
+	    ts_info("Register FW update module");
+	    goodix_ts_fw_update = 1;
+	    goodix_fwu_module_init();
+	}
+	
+	if((en == 0) &&  (goodix_ts_fw_update == 1)) {
+	    goodix_fwu_module_exit();
+            goodix_ts_fw_update = 0;
 	}
 
 	return count;
+}
+
+static ssize_t goodix_ts_fw_update_progress_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	ts_info("fw update progress %d",update_progress);
+	return sprintf(buf, "%d", update_progress);
 }
 
 /* show goodix station touch status */
@@ -997,6 +1014,7 @@ static DEVICE_ATTR(print_touch_count, S_IRUGO | S_IWUSR | S_IWGRP,
 static DEVICE_ATTR(enable_timestamp,S_IRUGO|S_IWUSR, goodix_timestamp_show, goodix_timestamp_store);
 static DEVICE_ATTR(enable_timestamp_debug,S_IRUGO|S_IWUSR, goodix_timestamp_debug_show, goodix_timestamp_debug_store);
 static DEVICE_ATTR(fw_update, S_IWUSR | S_IWGRP, NULL, goodix_ts_fw_update_store);
+static DEVICE_ATTR(fw_progress, S_IRUGO, goodix_ts_fw_update_progress_show, NULL);
 static DEVICE_ATTR(goodix_init, S_IRUGO, goodix_ts_init_show, NULL);
 static DEVICE_ATTR(fw_9886_info, S_IRUGO, Last_9886FW_info_show, NULL);
 // ASUS_BSP --- Touch
@@ -1017,6 +1035,7 @@ static struct attribute *sysfs_attrs[] = {
 	&dev_attr_enable_timestamp.attr,
 	&dev_attr_enable_timestamp_debug.attr,
 	&dev_attr_fw_update.attr,
+	&dev_attr_fw_progress.attr,
 	&dev_attr_goodix_init.attr,
 	&dev_attr_fw_9886_info.attr,
 // ASUS_BSP --- Touch
@@ -1201,12 +1220,19 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 	unsigned int touch_num = touch_data->touch_num;
 	static u32 pre_fin;
 	int i;
+	static int touch_count = 0;
+	static bool first_data = true;
 
 	/*first touch down and last touch up condition*/
-	if (touch_num && !pre_fin)
+	if (touch_num && !pre_fin) {
 		input_report_key(dev, BTN_TOUCH, 1);
-	else if (!touch_num && pre_fin)
+		ts_info("BTN_TOUCH down");
+	}
+	else if (!touch_num && pre_fin) {
 		input_report_key(dev, BTN_TOUCH, 0);
+		ts_info("BTN_TOUCH up");
+		touch_count = 0;
+	}
 
 	pre_fin = touch_num;
 
@@ -1226,7 +1252,17 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 		input_report_abs(dev, ABS_MT_POSITION_Y,
 				 touch_data->coords[i].y);
 		input_report_abs(dev, ABS_MT_PRESSURE,
-				 touch_data->coords[i].p);
+				 touch_data->coords[i].w);
+		touch_count ++ ;
+		if ((touch_count == 1) && (first_data == true)) {
+		    first_data = false;
+		    ts_info("[%3d][%2d]%4d|%4d|%3d|", touch_count, i, touch_data->coords[i].x, touch_data->coords[i].y, touch_data->coords[i].w);
+		}
+		if (touch_count >= print_touch_count_max) {
+		    ts_info("[%3d][%2d]%4d|%4d|%3d|", touch_count, i, touch_data->coords[i].x, touch_data->coords[i].y, touch_data->coords[i].w);
+		    touch_count = 0;
+		}
+
 	}
 
 	/* report panel key */
@@ -1502,7 +1538,9 @@ static void goodix_ts_set_input_params(struct input_dev *input_dev,
 			     0, ts_bdata->panel_max_y, 0, 0);
 	input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR,
 			     0, ts_bdata->panel_max_w, 0, 0);
-
+	input_set_abs_params(input_dev, ABS_MT_PRESSURE,
+			     0, ts_bdata->panel_max_p, 0, 0);
+	
 	if (ts_bdata->panel_max_key) {
 		for (i = 0; i < ts_bdata->panel_max_key; i++)
 			input_set_capability(input_dev, EV_KEY,
@@ -1524,12 +1562,12 @@ static int goodix_ts_input_dev_config(struct goodix_ts_core *core_data)
 	struct input_dev *input_dev = NULL;
 	int r;
 
-	input_dev = input_allocate_device();
+	input_dev = devm_input_allocate_device(&core_data->pdev->dev);
 	if (!input_dev) {
 		ts_err("Failed to allocated input device");
 		return -ENOMEM;
 	}
-
+        input_dev_add = 1;
 	core_data->input_dev = input_dev;
 	input_set_drvdata(input_dev, core_data);
 
@@ -2096,16 +2134,35 @@ static int goodix_generic_noti_callback(struct notifier_block *self,
 
 	ts_info("notify event type 0x%x", (unsigned int)action);
 	switch (action) {
-	case NOTIFY_FWUPDATE_SUCCESS:
-	case NOTIFY_FWUPDATE_FAILED:
+	case NOTIFY_FWUPDATE_SUCCESS: 	  
+	  	ts_info("FW update complete , reset ic");
+		update_progress = 100;
+		hw_ops->reset(ts_dev);		
+		
 		r = hw_ops->read_version(ts_dev, &ts_dev->chip_version);
 		if (r < 0)
 			ts_info("failed read fw version info[ignore]");
+		
+		station_touch_recovery = 0;
 		break;
+	case NOTIFY_FWUPDATE_FAILED:
+		ts_info("FW update failed");
+		station_touch_recovery = 2;
+		break;	
+	case NOTIFY_FWUPDATE_PROGRESS:
+	        update_progress +=fw_update_count;
+		station_touch_recovery = 1;
+	        ts_info("NOTIFY_FWUPDATE_PROGRESS FW updating %d",update_progress);
+	        break;
+	case NOTIFY_CFG_BIN_FAILED :
+	        ts_info("load config bin failed");
+		break;
+	case NOTIFY_CFG_BIN_SUCCESS :
+	        ts_info("load config bin success");
+		break;		
 	default:
 		break;
 	}
-
 	return 0;
 }
 
@@ -2113,16 +2170,35 @@ int goodix_ts_stage2_init(struct goodix_ts_core *core_data)
 {
 	int r;
 	struct goodix_ts_device *ts_dev = ts_device(core_data);
+	
 
+	
+	if(core_data==NULL || ts_dev==NULL)
+	  return 0;
+	
 	/* send normal-cfg to firmware */
 	r = ts_dev->hw_ops->send_config(ts_dev, &(ts_dev->normal_cfg));
 	if (r < 0) {
-		ts_info("failed send normal config[ignore]");
+		ts_info("failed send normal config[reset and retry]");
+		r = ts_dev->hw_ops->reset(ts_dev);
+		msleep(500);
+		r = ts_dev->hw_ops->send_config(ts_dev, &(ts_dev->normal_cfg));
+		if (r < 0) {
+		  ts_info("failed send normal config[ignore]");
+		  r = ts_dev->hw_ops->reset(ts_dev);
+		} else
+		  ts_info("success send normal config after reset");
 	}
+	
+	if(core_data==NULL || ts_dev==NULL)
+	  return 0;
 
 	r = ts_dev->hw_ops->read_version(ts_dev, &ts_dev->chip_version);
 	if (r < 0)
 		ts_info("failed read fw version info[ignore]");
+
+	if(core_data==NULL || ts_dev==NULL)
+	  return 0;
 
 	/* alloc/config/register input device */
 	r = goodix_ts_input_dev_config(core_data);
@@ -2131,6 +2207,9 @@ int goodix_ts_stage2_init(struct goodix_ts_core *core_data)
 		return r;
 	}
 
+	if(core_data==NULL || ts_dev==NULL)
+	  return 0;
+
 	if (ts_dev->board_data.pen_enable) {
 		r = goodix_ts_pen_dev_config(core_data);
 		if (r < 0) {
@@ -2138,6 +2217,10 @@ int goodix_ts_stage2_init(struct goodix_ts_core *core_data)
 			goto err_finger;
 		}
 	}
+
+	if(core_data==NULL || ts_dev==NULL)
+	  return 0;
+
 	/* request irq line */
 	r = goodix_ts_irq_setup(core_data);
 	if (r < 0) {
@@ -2157,6 +2240,8 @@ int goodix_ts_stage2_init(struct goodix_ts_core *core_data)
 	register_early_suspend(&core_data->early_suspend);
 #endif
 */
+	if(core_data==NULL || ts_dev==NULL)
+	  return 0;
 
 #ifdef CONFIG_TOUCHSCREEN_GOODIX_DRM_NOTIFY
 	core_data->fb_notifier.notifier_call = asus_station_display_notifier_call;
@@ -2166,15 +2251,24 @@ int goodix_ts_stage2_init(struct goodix_ts_core *core_data)
 		else {
 			if (drm_panel_notifier_register(active_panel_asus_station, &core_data->fb_notifier) < 0)
 				ts_err("Failed to drm_panel_notifier_register:%d", r);
+			else
+			  drm_registed = 1;
 		}
-	}
-	else {
+	} else {
 		if (drm_panel_notifier_register(active_panel_asus_station, &core_data->fb_notifier) < 0)
 			ts_err("Failed to drm_panel_notifier_register:%d", r);
+		else
+		  drm_registed = 1;
 	}
 #endif
+	if(core_data==NULL || ts_dev==NULL)
+	  return 0;
+
 	/*create sysfs files*/
 	goodix_ts_sysfs_init(core_data);
+
+	if(core_data==NULL || ts_dev==NULL)
+	  return 0;
 
 	/* esd protector */
 	goodix_ts_esd_init(core_data);
@@ -2260,7 +2354,8 @@ out:
 	print_touch_count_max = 100;
 	
         goodix_station_ts_success = 1;
-	
+	update_progress = 0;
+	print_touch_count_max = 100;
 	ts_info("goodix_ts_probe OUT, r:%d", r);
 	/* wakeup ext module register work */
 	complete_all(&goodix_modules.core_comp);
@@ -2271,17 +2366,26 @@ static int goodix_ts_remove(struct platform_device *pdev)
 {
 	struct goodix_ts_core *core_data = platform_get_drvdata(pdev);
         ts_info("goodix_ts_remove start");
-	
+
+	ts_info("goodix_station_ts_success %d",goodix_station_ts_success);
+	if (goodix_station_ts_success == 0) {
+	    ts_info("moudle init fail, no need remove");
+	    return 0;
+	}
 	core_data->initialized = 0;
 	station_goodix_ts_irq_enable(core_data, false);
+	
 
 #ifdef CONFIG_TOUCHSCREEN_GOODIX_DRM_NOTIFY
-	drm_panel_notifier_unregister(active_panel_asus_station,&core_data->fb_notifier);
+	if (drm_registed == 1)
+	  drm_panel_notifier_unregister(active_panel_asus_station,&core_data->fb_notifier);
 #endif
 	
 	if (atomic_read(&core_data->ts_esd.esd_on))
 		goodix_ts_esd_off(core_data);
-
+        if (input_dev_add == 1) {
+	    goodix_ts_input_dev_remove(core_data);
+	}
 	goodix_remove_all_ext_modules();
 	goodix_ts_power_off(core_data);
 	goodix_debugfs_exit();
@@ -2321,8 +2425,18 @@ static struct platform_driver goodix_ts_driver = {
 	.id_table = ts_core_ids,
 };
 
+#ifdef ASUS_ZS661KS_PROJECT
+extern bool g_Recovery_mode;
+#endif
+
 int goodix_ts_core_init(void)
 {
+#ifdef ASUS_ZS661KS_PROJECT
+      if(g_Recovery_mode) {
+          ts_info("Core layer init(station): not for recovery mode");
+          return 0;
+	}
+#endif
 	ts_info("[station] Core layer init");
 	if (!goodix_modules.initilized) {
 		/* this may init by outer modules register event */
@@ -2341,34 +2455,52 @@ int goodix_ts_core_init(void)
 /* uninit module manually */
 int goodix_ts_core_release(struct goodix_ts_core *core_data)
 {
-	ts_info("goodix core module removed");
+	ts_info("goodix core module removed , goodix_station_ts_success %d",goodix_station_ts_success);
 
 	platform_driver_unregister(&goodix_ts_driver);
 	goodix_ts_dev_release();
+	    
 	return 0;
 }
+
+int goodix_ts_core_init_fw(struct goodix_ts_core *core_data)
+{
+	ts_info("FW module init");
+        goodix_ts_fw_update = 1;
+	station_touch_recovery = 1;
+	goodix_fwu_module_init();
+	return 0;
+}
+
 
 static int __init goodix_ts_module_init(void)
 {
 	printk("[station] goodix_ts_module_init");
 	goodix_i2c_init();
-        goodix_tools_init();
-/*	
-	goodix_ts_fw_update = 1;
-	goodix_fwu_module_init();
-*/
+        goodix_tools_init();	
+
 	return 0;
 }
 
 static void __exit goodix_ts_module_exit(void)
 {
         ts_info("[station] goodix_ts_module_exit");
-	if ( goodix_ts_fw_update == 1 )
-	    goodix_fwu_module_exit();
+	
+	if (cfg_runing) {
+	  ts_info("config init not complete , stop init thread");
+	  exit_init();
+	}
 	goodix_tools_exit();
 
-	platform_driver_unregister(&goodix_ts_driver);
-	goodix_ts_dev_release();
+	if (goodix_station_ts_success == 1) {
+	    if ( goodix_ts_fw_update == 1 ) {
+		goodix_fwu_module_exit();
+		goodix_ts_fw_update = 0;
+	    }
+	    station_touch_recovery = 0;
+	    platform_driver_unregister(&goodix_ts_driver);
+	    goodix_ts_dev_release();
+	}
 }
 
 module_init(goodix_ts_module_init);

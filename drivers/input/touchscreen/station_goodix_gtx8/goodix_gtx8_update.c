@@ -74,10 +74,12 @@ extern int ec_i2c_set_gpio(u8 gpio, u8 value);
 #endif
 bool goodix_fw_update_thread_finish = false;
 bool fwm_int = false;
+int fw_update_count = 0;
 
 struct task_struct *fwu_thrd;
 
 extern int Station_HWID;
+
 /**
  * fw_subsys_info - subsytem firmware infomation
  * @type: sybsystem type
@@ -537,7 +539,7 @@ static int goodix_update_prepare(struct fw_update_ctrl *fwu_ctrl)
 
 	fwu_ctrl->allow_reset = false;
 
-	retry = 100;
+	retry = 10;
 	do {
 		if (ts_dev->ic_type != IC_TYPE_YELLOWSTONE)
 			break;
@@ -837,7 +839,7 @@ static int goodix_flash_firmware(struct goodix_ts_device *dev,
 	int i, r = 0, fw_num, prog_step;
 	u8 *fw_packet = NULL;
 	u8 *flash_cfg = NULL;
-
+        int update_progress = 0;
 	/* start from subsystem 1,
 	 * subsystem 0 is the ISP program
 	 */
@@ -847,7 +849,7 @@ static int goodix_flash_firmware(struct goodix_ts_device *dev,
 
 	/* we have 80% work here */
 	prog_step = 80 / (fw_num - 1);
-
+        fw_update_count = prog_step;
 	for (i = 1; i < fw_num && retry;) {
 		ts_info("--- Start to flash subsystem[%d] ---", i);
 		fw_x = &fw_info->subsys[i];
@@ -855,6 +857,8 @@ static int goodix_flash_firmware(struct goodix_ts_device *dev,
 		if (r == 0) {
 			ts_info("--- End flash subsystem[%d]: OK ---", i);
 			fw_ctrl->progress += prog_step;
+			update_progress = fw_ctrl->progress;
+			station_goodix_ts_blocking_notify(NOTIFY_FWUPDATE_PROGRESS, NULL);
 			i++;
 		} else if (r == -EAGAIN) {
 			retry--;
@@ -912,12 +916,14 @@ static int goodix_update_finish(struct goodix_ts_device *ts_dev,
 	if (r < 0)
 		ts_err("Failed to run ss51");
 
-	/*reset*/
-	gpio_direction_output(ts_dev->board_data.reset_gpio, 0);
+	/*reset*/	
+	ts_dev->hw_ops->reset(ts_dev);
+	
+/*	gpio_direction_output(ts_dev->board_data.reset_gpio, 0);
 	udelay(2000);
 	gpio_direction_output(ts_dev->board_data.reset_gpio, 1);
 	msleep(80);
-
+*/
 	for (i = 0; ts_dev->ic_type == IC_TYPE_YELLOWSTONE && i < 100; i++) {
 		reg_val[0] = 0x00;
 		r = goodix_reg_write_confirm(ts_dev, HW_REG_GIO_YS, reg_val, 1);
@@ -1463,6 +1469,8 @@ int goodix_do_fw_update(int mode)
 	struct fw_update_ctrl *fwu_ctrl = &goodix_fw_update_ctrl;
 	int ret;
 
+	ts_info("goodix_do_fw_update mode %d",mode);
+	
 	if (!fwu_ctrl->initialized) {
 		ts_err("fw mode uninit");
 		return -EINVAL;
@@ -1494,6 +1502,8 @@ static int goodix_fw_update_init(struct goodix_ts_core *core_data,
 	int ret = 0;
 	struct goodix_ts_board_data *ts_bdata = board_data(core_data);
 
+	
+	ts_info("goodix_fw_update_init");
 	if (goodix_fw_update_ctrl.initialized) {
 		ts_info("no need reinit");
 		return ret;

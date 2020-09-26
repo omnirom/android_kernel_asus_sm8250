@@ -88,7 +88,6 @@ enum TS_SEND_CFG_REPLY {
 #define IRQ_HEAD_LEN_NOR		2
 
 // ASUS_BSP +++ Touch
-extern char asus_var_panel_stage[3];
 extern bool GoodixTSEnTimestamp;
 extern bool GoodixTSEnTimestampDebug;
 
@@ -105,6 +104,7 @@ extern uint8_t gDongleType;
 
 extern struct drm_panel *active_panel_asus_station;
 struct device_node *g_np;
+extern int Station_HWID;
 //station ---
 
 int goodix_ts_core_init(void);
@@ -318,7 +318,7 @@ int goodix_i2c_test(struct goodix_ts_device *dev)
  */
 static int goodix_ts_dev_confirm(struct goodix_ts_device *ts_dev)
 {
-#define DEV_CONFIRM_RETRY 3
+#define DEV_CONFIRM_RETRY 20
 	int retry;
 
 	for (retry = 0; retry < DEV_CONFIRM_RETRY; retry++) {
@@ -327,7 +327,7 @@ static int goodix_ts_dev_confirm(struct goodix_ts_device *ts_dev)
 		ec_i2c_set_gpio(Station_TP_RST, 0);
 		udelay(2000);
 		ec_i2c_set_gpio(Station_TP_RST, 1);
-		msleep(5);
+		msleep(100);
 #endif
 		if (!goodix_i2c_test(ts_dev)) {
 			msleep(95);
@@ -479,10 +479,6 @@ int goodix_i2c_write_trans(struct goodix_ts_device *dev, unsigned int reg,
 				address += transfer_length;
 				break;
 			}
-#ifdef CONFIG_TOUCHSCREEN_GOODIX_GTX8_SUPPORT			
-			ts_info("I2c write retry[%d] gDongleType=%d", retry + 1, gDongleType);
-#endif		
-			msleep(20);
 		}
 		if (unlikely(retry == GOODIX_BUS_RETRY_TIMES)) {
 			ts_err("I2c write failed,dev:%02x,reg:%04x,size:%u",
@@ -1743,33 +1739,28 @@ static int goodix_touch_handler_ys(struct goodix_ts_device *dev,
 
 	/* process custom info */
 	if (buffer[3] & 0x01) {
-		// ts_debug("TODO add custom info process function");
-// ASUS_BSP +++ Touch "only 9896"
-/*		if (asus_var_panel_stage[0]=='B' && (GoodixTSEnTimestamp == true)){
-			ts_debug("%d,%d",pre_buf_len,touch_num);
-			r = goodix_i2c_read_trans(dev, dev->reg.coor + pre_buf_len + ((touch_num - 1) * BYTES_PER_COORD),
-									&buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD)], 6);
-			if (unlikely(r < 0))
-				goto exit_clean_sta;
-			chksum = checksum_u8_ys(&buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD)],6);
-			if (unlikely(chksum != 0)) {
-				ts_debug("Timestamp checksum error:%x", chksum);
-				r = -EINVAL;
-				goto exit_clean_sta;
-			}
-			GoodixTSTimeStamp = (unsigned char)(buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD + 0)]) << 24 |
-					(unsigned char)(buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD + 1)]) << 16 |
-					(unsigned char)(buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD + 2)]) << 8 |
-					(unsigned char)(buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD + 3)]);
-			ts_debug("%x,%x,%x,%x",(buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD + 0)]),
-								(buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD + 1)]),
-					(buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD + 2)]),
-					(buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD + 3)]));
-			if (GoodixTSEnTimestampDebug == true ) {
-				ts_info("Timestamp : %x",GoodixTSTimeStamp);
-			}
-		}*/
-// ASUS_BSP --- Touch
+	    if (Station_HWID == 3){
+		ts_debug("TODO add custom info process function");
+		ts_debug("%d,%d",pre_buf_len,touch_num);
+		r = goodix_i2c_read_trans(dev, dev->reg.coor + pre_buf_len + ((touch_num - 1) * BYTES_PER_COORD),
+						  &buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD)], 4);
+		if (unlikely(r < 0))
+		    goto exit_clean_sta;
+		
+		chksum = checksum_u8_ys(&buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD)],4);
+		if (unlikely(chksum != 0)) {
+		    ts_debug("Timestamp checksum error:%x", chksum);
+		    r = -EINVAL;
+		    goto exit_clean_sta;
+		}
+		GoodixTSTimeStamp = (unsigned char)(buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD + 0)]) << 8 |
+						(unsigned char)(buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD + 1)]);
+		ts_debug("%x,%x",(buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD + 0)]),
+						(buffer[pre_buf_len+((touch_num - 1) * BYTES_PER_COORD + 1)]));
+		if (GoodixTSEnTimestampDebug == true ) {
+			ts_info("Timestamp : %d",GoodixTSTimeStamp);
+		}
+	    }
 	}
 exit_clean_sta:
 	return r;

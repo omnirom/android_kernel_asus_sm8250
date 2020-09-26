@@ -3,10 +3,13 @@
 extern struct goodix_module goodix_modules;
 extern bool fwm_int;
 extern int Station_HWID;
+bool cfg_runing = false;
+
+struct task_struct *init_thrd;
 
 int goodix_ts_stage2_init(struct goodix_ts_core *core_data);
 int goodix_ts_core_release(struct goodix_ts_core *core_data);
-
+int goodix_ts_core_init_fw(struct goodix_ts_core *core_data);
 static int goodix_parse_cfg_bin(struct goodix_cfg_bin *cfg_bin);
 static int goodix_get_reg_and_cfg(struct goodix_ts_device *ts_dev,
 				  struct goodix_cfg_bin *cfg_bin);
@@ -516,14 +519,17 @@ static int goodix_later_init_thread(void *data)
 	int ret;
 	struct goodix_ts_core *ts_core = data;
 	struct goodix_ts_device *ts_dev;
-
+        cfg_runing = true;
+        
 	if (!data) {
 		ts_err("ts core data can't be null");
+		cfg_runing = false;
 		return -EINVAL;
 	}
 	ts_dev = ts_core->ts_dev;
 	if (!ts_dev) {
 		ts_err("ts dev data can't be null");
+		cfg_runing = false;
 		return -EINVAL;
 	}
 
@@ -540,23 +546,35 @@ static int goodix_later_init_thread(void *data)
 
 	if (ts_dev->cfg_bin_state == CFG_BIN_STATE_TEMP) {
 		ts_err("failed get valid config data, retry after fwupdate");
+		
+		if(!fwm_int) {
+		    ts_info("init FW update module force update last fw");
+		    goodix_ts_core_init_fw(ts_core);
+		    msleep(300);
+		}
+		
 		if (fwm_int) {
+		    ts_info("FW update module init start update FW");
 		    ret = goodix_do_fw_update(UPDATE_MODE_BLOCK|UPDATE_MODE_FORCE|
 					      UPDATE_MODE_FLASH_CFG|
 					      UPDATE_MODE_SRC_REQUEST);
+
 		    if (ret) {
 			    ts_err("fw update failed, %d", ret);
 			    goto release_core;
-		    }
+		    } 
 		} else {
-		  ts_info("FW update module not init");
+		  ts_info("FW update module init failed");
+		  ret = -EINVAL;
+		  goto release_core;
 		}
+		
 		
 		ts_info("fw update success retry parse cfg bin");
 		ret = goodix_cfg_bin_proc(ts_core);
 		if (ret) {
-			ts_err("failed parse cfg bin after fw update");
-			goto release_core;
+			ts_err("failed parse cfg bin after fw update, request manual update,%d[ignore]", ret);
+			ret = 0;
 		}
 	} else {
 		ts_info("success parse config bin");
@@ -575,18 +593,20 @@ static int goodix_later_init_thread(void *data)
 	ret = goodix_ts_stage2_init(ts_core);
 	if (!ret) {
 		ts_info("stage2 init success");
+		cfg_runing = false;
 		return ret;
 	}
 	ts_err("stage2 init failed, %d", ret);
-
+      
 release_core:
+        cfg_runing = false;
 	goodix_ts_core_release(ts_core);
 	return ret;
 }
 
 int goodix_start_later_init(struct goodix_ts_core *ts_core)
 {
-	struct task_struct *init_thrd;
+
 	/* create and run update thread */
 	init_thrd = kthread_run(goodix_later_init_thread,
 				ts_core, "goodix_init_thread");
@@ -596,4 +616,16 @@ int goodix_start_later_init(struct goodix_ts_core *ts_core)
 		return -EFAULT;
 	}
 	return 0;
+}
+
+void exit_init() {
+  
+	ts_info("Exit goodix_init_thread");
+        cfg_runing = false;
+	if (!IS_ERR(init_thrd) && !cfg_runing) {
+	  ts_info("init_thrd state %d",init_thrd);
+	  kthread_stop(init_thrd);
+		ts_info("kthread_stop init_thrd over !");
+		init_thrd = NULL;	  
+	}
 }
