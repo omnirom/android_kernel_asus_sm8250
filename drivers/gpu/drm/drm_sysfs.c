@@ -83,6 +83,7 @@ static int g_hdr = 0;
 int asus_ghbm_on_requested;
 int asus_ghbm_on_achieved;
 int fod_spot_ui_ready;
+int fod_gesture_touched;
 
 static ssize_t hdr_mode_show(struct class *class,
 					struct class_attribute *attr,
@@ -107,6 +108,7 @@ static CLASS_ATTR_RW(hdr_mode);
 //
 // FOD timing optimize
 //
+extern struct kobject* asus_class_get_kobj(struct class *cls);
 void asus_drm_notify(int var, int value)
 {
 	int *selected_var = NULL;
@@ -125,6 +127,10 @@ void asus_drm_notify(int var, int value)
 		selected_var = &fod_spot_ui_ready;
 		selected_var_name = "spot_on_achieved";
 		break;
+	case ASUS_NOTIFY_FOD_TOUCHED:
+		selected_var = &fod_gesture_touched;
+		selected_var_name = "fod_touched";
+		break;
 	default:
 		printk("[Display] unsupported drm notify variable type %d\n", var);
 		return;
@@ -140,7 +146,7 @@ void asus_drm_notify(int var, int value)
 	} else {
 		printk("[Display] update variable type %d from %d to %d\n", var, *selected_var, value);
 		*selected_var = value;
-		sysfs_notify(drm_class->dev_kobj, NULL, selected_var_name);
+		sysfs_notify(asus_class_get_kobj(drm_class), NULL, selected_var_name);
 	}
 }
 
@@ -167,6 +173,26 @@ static ssize_t spot_on_achieved_show(struct class *class,
 	return sprintf(buf, "%d\n", fod_spot_ui_ready);
 }
 static CLASS_ATTR_RO(spot_on_achieved);
+
+static ssize_t fod_touched_show(struct class *class,
+					struct class_attribute *attr,
+					char *buf)
+{
+	return sprintf(buf, "%d\n", fod_gesture_touched);
+}
+
+static ssize_t fod_touched_store(struct class *class,
+					struct class_attribute *attr,
+					const char *buf, size_t count)
+{
+	if (!count)
+		return -EINVAL;
+
+	sscanf(buf, "%d", &fod_gesture_touched);
+
+	return count;
+}
+static CLASS_ATTR_RW(fod_touched);
 #endif
 /* ASUS BSP Display, add for Hdr mode --- */
 
@@ -237,6 +263,14 @@ int drm_sysfs_init(void)
 		drm_class = NULL;
 		return err;
 	}
+
+	err = class_create_file(drm_class, &class_attr_fod_touched);
+	if (err) {
+		printk("[Display] Fail to create fod_touched file node\n");
+		class_destroy(drm_class);
+		drm_class = NULL;
+		return err;
+	}
 #endif
 
 	drm_class->devnode = drm_devnode;
@@ -263,6 +297,7 @@ void drm_sysfs_destroy(void)
 	class_remove_file(drm_class, &class_attr_ghbm_on_requested);
 	class_remove_file(drm_class, &class_attr_ghbm_on_achieved);
 	class_remove_file(drm_class, &class_attr_spot_on_achieved);
+	class_remove_file(drm_class, &class_attr_fod_touched);
 #endif
 	class_destroy(drm_class);
 	drm_class = NULL;
