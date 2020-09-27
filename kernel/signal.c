@@ -900,6 +900,13 @@ static bool prepare_signal(int sig, struct task_struct *p, bool force)
 #endif
 
 
+#ifdef ASUS_ZS661KS_PROJECT
+	if (sig == SIGSTOP && !strcmp("surfaceflinger",p->comm)){
+		printk("SurfaceFlinger always work hard!!! "); 
+		return false;
+	}
+#endif
+
 	if (signal->flags & (SIGNAL_GROUP_EXIT | SIGNAL_GROUP_COREDUMP)) {
 		if (!(signal->flags & SIGNAL_GROUP_EXIT))
 			return sig == SIGKILL;
