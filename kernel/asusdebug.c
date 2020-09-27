@@ -94,9 +94,14 @@ static const char * const ASUSEvt_poweroff_reason_str[] = {
 int entering_suspend = 0;
 #endif
 
+#ifdef ASUS_ZS661KS_PROJECT
+phys_addr_t PRINTK_BUFFER_PA = 0x97000000;
+phys_addr_t RTB_BUFFER_PA = 0x97000000 + SZ_2M;
+#else
 phys_addr_t PRINTK_BUFFER_PA = 0x91000000;
-void *PRINTK_BUFFER_VA;
 phys_addr_t RTB_BUFFER_PA = 0x91000000 + SZ_2M;
+#endif
+void *PRINTK_BUFFER_VA;
 ulong logcat_buffer_index = 0;
 
 //#define RT_MUTEX_HAS_WAITERS    1UL
@@ -1552,8 +1557,13 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
 				printk("[ASDF] asusdebug: ksys_sync\n");
 				deinitKernelEnv();
 				printk("[ASDF] asusdebug: deinitKernelEnv\n");
+#ifdef ASUS_ZS661KS_PROJECT
+				//qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
+				//kernel_restart("save lastshutdown");
+#else
 				qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
 				kernel_restart("save lastshutdown");
+#endif
 			}
 
 			(*printk_buffer_slot2_addr) = (ulong)PRINTK_BUFFER_MAGIC;
