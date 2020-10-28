@@ -282,6 +282,9 @@ extern bool PE_check_asus_vid(void);
 
 extern void asus_disable_smb1390(bool disable);
 
+extern bool is_QC2_HVDCP;
+extern int asus_get_prop_batt_volt(struct smb_charger *chg);
+
 #define ID_TOLERANCE		15
 #define BATT_ID_CRITERIA	100000
 extern struct fg_dev *g_fg;
@@ -4201,6 +4204,10 @@ static ssize_t smartchg_slow_charging_store(struct device *dev,
 {
 		int tmp = 0;
 		int max_current = 0;
+		int bat_volt;
+
+		union power_supply_propval voltage_val;
+
 		sscanf(buf, "%d", &tmp);
 		slow_charginglimit = tmp;
 
@@ -4209,7 +4216,7 @@ static ssize_t smartchg_slow_charging_store(struct device *dev,
 			CHG_DBG("disable slow charging\n");
 			smartchg_slow_flag = 0;
 			asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, false, 0);
-			if(smbchg_dev->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3 || smbchg_dev->pd_active == POWER_SUPPLY_PD_PPS_ACTIVE)
+			if( (smbchg_dev->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3 && !is_QC2_HVDCP ) || smbchg_dev->pd_active == POWER_SUPPLY_PD_PPS_ACTIVE) //QC3 or PPS
 			{
 				if(asus_get_prop_total_fcc() >2400)
 				{
@@ -4217,18 +4224,79 @@ static ssize_t smartchg_slow_charging_store(struct device *dev,
 				}
 			}
 		} else {
-			CHG_DBG("enable slow charging %dW\n", tmp);
+			CHG_DBG("enable slow charging %dW pd_active = %d , real_charger_type =%d \n", tmp,smbchg_dev->pd_active,smbchg_dev->real_charger_type);
 			smartchg_slow_flag = 1;
-			if(tmp == 18){
-				max_current = 2000000;
-			} else if(tmp == 10){
-				max_current = 1500000;
-			} else {
-				max_current = 1500000;
-				CHG_DBG_E("Unexpected power %dW\n", tmp);
+
+			if(tmp == 18)  //slow charging 18W
+			{
+				if(smbchg_dev->pd_active == POWER_SUPPLY_PD_PPS_ACTIVE ) //PPS
+				{
+					CHG_DBG_E("PPS \n");
+					asus_disable_smb1390(true);
+
+					max_current = 2000000;
+					asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, max_current);
+				}
+				else if(smbchg_dev->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3 && !is_QC2_HVDCP) //QC3
+				{
+					bat_volt = asus_get_prop_batt_volt(smbchg_dev);
+					CHG_DBG_E("QC3 bat_volt=  \n",bat_volt);
+					asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, false, 0);
+					if(asus_get_prop_total_fcc() >2400)
+					{
+						if(bat_volt < 4000000)
+						{
+							asus_disable_smb1390(false);
+						}
+					}
+				}
+				else if (is_QC2_HVDCP) //QC2
+				{
+					CHG_DBG_E("QC2 \n");
+					asus_disable_smb1390(true);
+					asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, false, 0);
+				}
+				else if( smbchg_dev->pd_active == POWER_SUPPLY_PD_ACTIVE ) //PD
+				{
+					CHG_DBG_E("PD \n");
+					asus_disable_smb1390(true);
+					asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, false, 0);
+				}
 			}
-			asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, max_current);
-			asus_disable_smb1390(true);
+			else if(tmp == 10) //slow charging 10W
+			{
+				asus_disable_smb1390(true);
+				mdelay(1000);
+				if(smbchg_dev->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3)
+				{
+					smblib_get_prop_usb_voltage_now(smbchg_dev, &voltage_val);
+					CHG_DBG_E("check vbus %d \n",voltage_val.intval);
+
+					if( voltage_val.intval > 8000000 )
+					{
+						max_current = 1000000;
+					}
+					else
+					{
+						max_current = 1500000;
+					}
+					asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, max_current);
+				}
+				else if ( smbchg_dev->pd_active == POWER_SUPPLY_PD_ACTIVE)
+				{
+					max_current = 1000000;
+					asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, max_current);
+				}
+				else if(smbchg_dev->pd_active == POWER_SUPPLY_PD_PPS_ACTIVE )
+				{
+					max_current = 1500000;
+					asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, max_current);
+				}
+			}
+			 else 
+			{
+				CHG_DBG_E("Unexpected power %dW , do nothing \n", tmp);
+			}
 		}
 
 		return len;

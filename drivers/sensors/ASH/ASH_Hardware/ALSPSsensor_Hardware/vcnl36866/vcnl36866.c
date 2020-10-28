@@ -239,6 +239,9 @@ static int vcnl36866_ALSPS_hw_init(struct i2c_client* client)
 	 * Do Not return when check ID
 	 */
 	ret = vcnl36866_ALSPS_hw_check_ID();
+	if(ret < 0){
+		return ret;
+	}
 	
 	/*Set Proximity config */
 	ret = vcnl36866_proximity_hw_set_config();

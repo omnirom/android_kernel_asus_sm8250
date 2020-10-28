@@ -10868,6 +10868,10 @@ static void get_ufs_status(struct ufs_hba *hba)
 				strcat(hba->ufs_status, "-v3.0-");
 				ufs_spec_ver = "v3.0";
 			}
+			else if (spec_ver == 0x310){
+				strcat(hba->ufs_status, "-v3.1-");
+				ufs_spec_ver = "v3.1";
+			}
 
 			if(!init_flag)
 				get_ufs_size(hba);

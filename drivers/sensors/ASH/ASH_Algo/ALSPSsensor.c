@@ -2343,10 +2343,10 @@ static int proximity_check_minCT(void)
 	if(crosstalk_diff>g_ps_data->g_ps_autok_min && crosstalk_diff<g_ps_data->g_ps_autok_max){
 		log("Update the diff for crosstalk : %d\n", crosstalk_diff);
 
-		//ASUS BSP Clay +++: prevent near > (pocket-1000) after autok
-		crosstalk_limit = g_pocket_mode_threshold - 1000 - g_ps_data->g_ps_factory_cal_hi;
+		//ASUS BSP Clay +++: prevent near > (pocket-500) after autok
+		crosstalk_limit = g_pocket_mode_threshold - 500 - g_ps_data->g_ps_factory_cal_hi;
 		if(crosstalk_diff > crosstalk_limit){
-			log("crosstalk_diff(%d) > pocket-1000-cal_hi(%d)", crosstalk_diff, crosstalk_limit);
+			log("crosstalk_diff(%d) > pocket-500-cal_hi(%d)", crosstalk_diff, crosstalk_limit);
 			crosstalk_diff = crosstalk_limit;
 		}
 		//ASUS BSP Clay ---
@@ -2415,10 +2415,10 @@ static void proximity_autok(struct work_struct *work)
 				g_ps_data->crosstalk_diff, g_ps_data->g_ps_calvalue_hi, g_ps_data->g_ps_calvalue_lo);
 		}else if((crosstalk_diff>g_ps_data->g_ps_autok_min) && (crosstalk_diff<g_ps_data->g_ps_autok_max)){
 		
-			//ASUS BSP Clay +++: prevent near > (pocket-1000) after autok
-			crosstalk_limit = g_pocket_mode_threshold - 1000 - g_ps_data->g_ps_factory_cal_hi;
+			//ASUS BSP Clay +++: prevent near > (pocket-500) after autok
+			crosstalk_limit = g_pocket_mode_threshold - 500 - g_ps_data->g_ps_factory_cal_hi;
 			if(crosstalk_diff > crosstalk_limit){
-				log("crosstalk_diff(%d) > pocket-1000-cal_hi(%d)", crosstalk_diff, crosstalk_limit);
+				log("crosstalk_diff(%d) > pocket-500-cal_hi(%d)", crosstalk_diff, crosstalk_limit);
 				crosstalk_diff = crosstalk_limit;
 			}
 			//ASUS BSP Clay ---
