@@ -174,6 +174,7 @@ struct fts_ts_data {
     int fw_is_running;      /* confirm fw is running when using spi:default 0 */
     int dummy_byte;
     bool suspended;
+    bool is_irq_trigger;
     bool fw_loading;
     bool irq_disabled;
     bool power_disabled;

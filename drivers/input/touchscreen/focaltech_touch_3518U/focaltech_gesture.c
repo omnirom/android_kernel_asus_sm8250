@@ -470,6 +470,9 @@ int fts_gesture_readdata(struct fts_ts_data *ts_data, u8 *data)
 
     /* report gesture to OS */
     fts_gesture_report(input_dev, gesture->gesture_id);
+
+    ts_data->is_irq_trigger = false;
+
     return 0;
 }
 

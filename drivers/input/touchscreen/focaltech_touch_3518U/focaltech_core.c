@@ -687,6 +687,8 @@ static void fts_irq_read_report(void)
     int ret = 0;
     struct fts_ts_data *ts_data = fts_data;
 
+    ts_data->is_irq_trigger = true;
+
 #if FTS_ESDCHECK_EN
     fts_esdcheck_set_intr(1);
 #endif
@@ -1637,6 +1639,7 @@ int fts_ts_suspend(void)
     mutex_unlock(&fts_data->suspend_mutex);
     fts_release_all_finger();
     ts_data->suspended = true;
+    ts_data->is_irq_trigger=false;
     FTS_FUNC_EXIT();
     return 0;
 }
@@ -1799,7 +1802,7 @@ static int fts_resume(struct device *dev)
 {
 	printk("[touch][fts]fts resume function! \n");
 	if (fts_init_success==1){
-		if (fts_data->suspended) {
+		if (fts_data->suspended && fts_data->is_irq_trigger) {
 			queue_work(fts_data->read_gesture_wq, &fts_data->gesturework);
 		}
 	} else
