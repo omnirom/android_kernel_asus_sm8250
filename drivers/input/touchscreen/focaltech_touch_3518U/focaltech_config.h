@@ -227,7 +227,7 @@
  * define your own fw_file, the sample one to be replaced is invalid
  * NOTE: if FTS_GET_MODULE_NUM > 1, it's the fw corresponding with FTS_VENDOR_ID
  */
-#define FTS_UPGRADE_FW_FILE                      "include/firmware/Zenfone7_VBC_D01_20201016_app.i"
+#define FTS_UPGRADE_FW_FILE                      "include/firmware/Zenfone7_VBE_D01_20201109_app.i"
 
 /*
  * if FTS_GET_MODULE_NUM >= 2, fw corrsponding with FTS_VENDOR_ID2
