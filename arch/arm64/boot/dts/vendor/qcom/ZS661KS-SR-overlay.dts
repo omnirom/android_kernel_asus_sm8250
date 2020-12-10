@@ -174,14 +174,6 @@
 };
 // ASUS_BSP Deeo : Station Power Key ---
 
-// ASUS_BSP Deeo : EC_Driver +++
-&soc {
-	ec_hid {
-		panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim &dsi_r66451_fhd_dsc_cmd_dim_er2>;
-	};
-};
-// ASUS_BSP Deeo : EC_Driver ---
-
 //Beryl "station touch"
 &qupv3_se1_i2c {
 	status = "ok";
@@ -190,7 +182,7 @@
 		reg = <0x5d>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <67 0x2008>;
-		panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim &dsi_r66451_fhd_dsc_cmd_dim_er2>;
+		panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim>;
 		goodix,irq-gpio = <&tlmm 67 0x2008>;
 		goodix,irq-flags = <2>; /* 1:trigger rising, 2:trigger falling;*/
 		goodix,panel-max-id = <10>; //max touch numbers
@@ -218,17 +210,6 @@
 &dsi_panel_pwr_supply_vci_no_labibb {
 	qcom,panel-supply-entry@2 {
 		reg = <2>;
-		qcom,supply-name = "touch";
-		qcom,supply-min-voltage = <1800000>;
-		qcom,supply-max-voltage = <1800000>;
-		qcom,supply-enable-load = <62000>;
-		qcom,supply-disable-load = <80>;
-		qcom,supply-post-on-sleep = <0>;
-		qcom,supply-post-off-sleep = <2>;
-	};
-
-	qcom,panel-supply-entry@3 {
-		reg = <3>;
 		qcom,supply-name = "amoled"; //external vdd
 		qcom,supply-min-voltage = <1200000>;
 		qcom,supply-max-voltage = <1200000>;
@@ -242,7 +223,6 @@
 
 &sde_dsi {
 	amoled-supply = <&pm8150a_l3>;
-	touch-supply = <&pm8150_l7>;
 	qcom,dsi-default-panel = <&dsi_r66451_fhd_dsc_cmd_dim>;
 	asus,platform-fod-exi1-gpio = <&tlmm 32 0>; //EXI CN SKU
 	asus,platform-fod-exi2-gpio = <&tlmm 54 0>; //EXI CN SKU
@@ -437,14 +417,6 @@
 	qcom,va-dmic-sample-rate = <2400000>;
 };
 
-&tx_macro {
-	tx-vdd-micb-supply = <&L1C>;
-	qcom,tx-vdd-micb-voltage = <1800000 1800000>;
-	qcom,tx-vdd-micb-current = <11200>;
-	qcom,tx-dmic-sample-rate = <2400000>;
-	qcom,tx-swr-gpios;
-};
-
 &wsa_spkr_en1 {
 	status = "disabled";
 };
@@ -511,7 +483,7 @@
 			USB3_DP_QSERDES_COM_BIN_VCOCAL_CMP_CODE1_MODE1 0xCA 0
 			USB3_DP_QSERDES_COM_BIN_VCOCAL_CMP_CODE2_MODE1 0x1E 0
 			USB3_DP_QSERDES_COM_BIN_VCOCAL_HSCLK_SEL 0x11 0
-		        USB3_DP_QSERDES_TXA_TX_DRV_LVL 0x3B 0
+		        USB3_DP_QSERDES_TXA_TX_DRV_LVL 0x3F 0
 			USB3_DP_QSERDES_TXA_PRE_EMPH 0x25 0
 			USB3_DP_QSERDES_TXA_RES_CODE_LANE_TX 0x60 0
 			USB3_DP_QSERDES_TXA_RES_CODE_LANE_RX 0x60 0
@@ -556,7 +528,7 @@
 			USB3_DP_QSERDES_RXA_DCC_CTRL1 0x0C 0
 			USB3_DP_QSERDES_RXA_GM_CAL 0x1F 0
 			USB3_DP_QSERDES_RXA_VTH_CODE 0x10 0
-		        USB3_DP_QSERDES_TXB_TX_DRV_LVL 0x3B 0
+		        USB3_DP_QSERDES_TXB_TX_DRV_LVL 0x3F 0
 			USB3_DP_QSERDES_TXB_PRE_EMPH 0x25 0
 			USB3_DP_QSERDES_TXB_RES_CODE_LANE_TX 0x60 0
 			USB3_DP_QSERDES_TXB_RES_CODE_LANE_RX 0x60 0

@@ -2367,7 +2367,7 @@
 				output-low;
 			};
 		};
-
+		
 		cam_sensor_active_rear_aux: cam_sensor_active_rear_aux {
 			/* RESET REARAUX */
 			mux {
@@ -2396,6 +2396,20 @@
 				output-low;
 			};
 		};
+
+		cam_8m_2p8_mb_en: cam_8m_2p8_mb_en {
+                        /* RESET REARAUX */
+                        mux {
+                                pins = "gpio91";
+                                function = "gpio";
+                        };
+
+                        config {
+                                pins = "gpio91";
+                                bias-disable; /* No PULL */
+                                drive-strength = <2>; /* 2 MA */
+                        };
+                };
 
 		cam_sensor_active_rst2: cam_sensor_active_rst2 {
 			/* RESET 2 */

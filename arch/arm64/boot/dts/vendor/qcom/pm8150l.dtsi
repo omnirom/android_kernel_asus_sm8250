@@ -323,7 +323,7 @@
 			reg-names = "lpg-base", "lut-base";
 			#pwm-cells = <2>;
 			qcom,num-lpg-channels = <3>;
-			qcom,lut-patterns = <10 10 10 10 0 0 0 0 0 0 0
+			qcom,lut-patterns = <20 20 20 20 0 0 0 0 0 0 0
 						0 0 0 0 0 0 0 0 0 0>;
 			lpg1 {
 				qcom,lpg-chan-id = <1>;

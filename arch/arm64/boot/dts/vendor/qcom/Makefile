@@ -34,6 +34,7 @@ ifdef CONFIG_MACH_ASUS_ZS670KS
                 zs670ks-sr2-asus-overlay.dtbo \
                 zs670ks-sr3-asus-overlay.dtbo \
                 zs670ks-er-asus-overlay.dtbo \
+                zs670ks-er2-asus-overlay.dtbo \
                 zs670ks-pr-asus-overlay.dtbo \
                 zs670ks-mp-asus-overlay.dtbo
 
@@ -43,6 +44,7 @@ zs670ks-sr-asus-overlay.dtbo-base := kona.dtb kona-v2.dtb kona-v2.1.dtb
 zs670ks-sr2-asus-overlay.dtbo-base := kona.dtb kona-v2.dtb kona-v2.1.dtb
 zs670ks-sr3-asus-overlay.dtbo-base := kona.dtb kona-v2.dtb kona-v2.1.dtb
 zs670ks-er-asus-overlay.dtbo-base := kona.dtb kona-v2.dtb kona-v2.1.dtb
+zs670ks-er2-asus-overlay.dtbo-base := kona.dtb kona-v2.dtb kona-v2.1.dtb
 zs670ks-pr-asus-overlay.dtbo-base := kona.dtb kona-v2.dtb kona-v2.1.dtb
 zs670ks-mp-asus-overlay.dtbo-base := kona.dtb kona-v2.dtb kona-v2.1.dtb
 else

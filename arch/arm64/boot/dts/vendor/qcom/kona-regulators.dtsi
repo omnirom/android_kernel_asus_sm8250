@@ -794,15 +794,6 @@
 			qcom,init-voltage = <3008000>;
 			qcom,init-mode = <RPMH_REGULATOR_MODE_AUTO>;
 		};
-		
-		BOB_L: pm8150l_bob: regulator-pm8150l-bob {
-			regulator-name = "pm8150l_bob";
-			qcom,set = <RPMH_REGULATOR_SET_ALL>;
-			regulator-min-microvolt = <3008000>;
-			regulator-max-microvolt = <4000000>;
-			qcom,init-voltage = <3312000>;
-			qcom,init-mode = <RPMH_REGULATOR_MODE_PASS>;
-		};
 	};
 
 	rpmh-regulator-smpf1 {
