@@ -57,6 +57,7 @@
 #define GESTURE_UP                              0x22
 #define GESTURE_DOWN                            0x23
 #define GESTURE_DOUBLECLICK                     0x24
+#define GESTURE_SINGLECLICK                     0x27
 #define GESTURE_O                               0x30
 #define GESTURE_W                               0x31
 #define GESTURE_M                               0x32
@@ -372,6 +373,9 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
     case MUSIC_FORWARD:
 	gesture = KEY_FORWARD;
 	break;
+    case GESTURE_SINGLECLICK:
+	gesture = KEY_GESTURE_L;
+	break;
     default:
         gesture = -1;
         break;
@@ -557,6 +561,14 @@ int fts_gesture_suspend(struct fts_ts_data *ts_data)
 			}
 		}
 	}
+
+    if (fts_data->aod_enable == 1) {
+        FTS_gesture_register_D1 |= 0x80;
+        FTS_INFO("[Focal][Touch] %s : aod : 1 \n", __func__);
+    } else {
+        FTS_gesture_register_D1 &= 0x7F;
+        FTS_INFO("[Focal][Touch] %s : aod : 0 \n", __func__);
+    }
 
 	for (i = 0; i < 5; i++) {
 		state=fts_write_reg(0xd1, FTS_gesture_register_D1);

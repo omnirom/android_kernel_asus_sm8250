@@ -295,6 +295,7 @@ extern struct fg_dev *g_fg;
 extern bool ATD_Is_battID_within_range(int battID_criteria);
 extern int asus_extcon_set_state_sync(struct extcon_dev *edev, int cable_state);
 extern int asus_extcon_get_state(struct extcon_dev *edev);
+extern char *saved_command_line;
 
 static int __debug_mask;
 
@@ -3055,14 +3056,39 @@ static int smb5_init_hw(struct smb5 *chip)
 		return rc;
 	}
 
-	rc = smblib_write(chg, CHGR_FAST_CHARGE_SAFETY_TIMER_CFG_REG,
-					FAST_CHARGE_SAFETY_TIMER_768_MIN);
-	if (rc < 0) {
-		dev_err(chg->dev, "Couldn't set CHGR_FAST_CHARGE_SAFETY_TIMER_CFG_REG rc=%d\n",
-			rc);
-		return rc;
-	}
+	if (strstr(saved_command_line, "androidboot.serialno=TAIPEI00066")
+		|| strstr(saved_command_line, "androidboot.serialno=TAIPEI00033")
+		|| strstr(saved_command_line, "androidboot.serialno=TAIPEI00042")
+		|| strstr(saved_command_line, "androidboot.serialno=TAIPEI00020")
+		|| strstr(saved_command_line, "androidboot.serialno=L4AIBP000170GB7")
+		|| strstr(saved_command_line, "androidboot.serialno=L6AIB7N00419XVG"))
+	{
+		rc = smblib_write(chg, CHGR_SAFETY_TIMER_ENABLE_CFG_REG,
+					0x0);
+		if (rc < 0) {
+			dev_err(chg->dev, "Couldn't set CHGR_SAFETY_TIMER_ENABLE_CFG_REG rc=%d\n",
+				rc);
+			return rc;
+		}
 
+		rc = smblib_write(chg, CHGR_FAST_CHARGE_SAFETY_TIMER_CFG_REG,
+					FAST_CHARGE_SAFETY_TIMER_1536_MIN);
+		if (rc < 0) {
+			dev_err(chg->dev, "Couldn't set CHGR_FAST_CHARGE_SAFETY_TIMER_CFG_REG rc=%d\n",
+				rc);
+			return rc;
+		}
+	}
+	else
+	{
+		rc = smblib_write(chg, CHGR_FAST_CHARGE_SAFETY_TIMER_CFG_REG,
+					FAST_CHARGE_SAFETY_TIMER_768_MIN);
+		if (rc < 0) {
+			dev_err(chg->dev, "Couldn't set CHGR_FAST_CHARGE_SAFETY_TIMER_CFG_REG rc=%d\n",
+				rc);
+			return rc;
+		}
+	}
 	rc = smb5_configure_recharging(chip);
 	if (rc < 0)
 		return rc;
@@ -4391,6 +4417,40 @@ static ssize_t smartchg_slow_charging_store(struct device *dev,
 					CHG_DBG_E("check vbus %d \n",voltage_val.intval);
 
 					if( voltage_val.intval > 8000000 )
+					{
+						max_current = 1000000;
+					}
+					else
+					{
+						max_current = 1500000;
+					}
+					asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, max_current);
+				}
+				else if ( smbchg_dev->pd_active == POWER_SUPPLY_PD_ACTIVE)
+				{
+					max_current = 1000000;
+					asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, max_current);
+				}
+				else if(smbchg_dev->pd_active == POWER_SUPPLY_PD_PPS_ACTIVE )
+				{
+					max_current = 1500000;
+					asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, max_current);
+				}
+			}
+			else if(tmp == 9 || tmp == 12) // slow charging 9W/12W
+			{
+				asus_disable_smb1390(true);
+				mdelay(1000);
+				if(smbchg_dev->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3)
+				{
+					smblib_get_prop_usb_voltage_now(smbchg_dev, &voltage_val);
+					CHG_DBG_E("check vbus %d \n",voltage_val.intval);
+
+					if( voltage_val.intval > 8000000 && tmp == 12)
+					{
+						max_current = 1500000;
+					}
+					else if (voltage_val.intval > 8000000 && tmp == 9)
 					{
 						max_current = 1000000;
 					}

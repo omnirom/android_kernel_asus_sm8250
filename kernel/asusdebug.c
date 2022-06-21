@@ -317,6 +317,13 @@ void print_all_thread_info(void)
 			if (pti->pWaitingMutex->mutex_owner_asusdebug) {
 				save_log(" Owned by pID(%d)", pti->pWaitingMutex->mutex_owner_asusdebug->pid);
 				printk(" Owned by pID(%d)", pti->pWaitingMutex->mutex_owner_asusdebug->pid);
+				if (strlen(pti->pWaitingMutex->mutex_owner_asusdebug->comm)!=0) {
+					save_log(" %s", pti->pWaitingMutex->mutex_owner_asusdebug->comm);
+					printk(" %s", pti->pWaitingMutex->mutex_owner_asusdebug->comm);
+				} else {
+					printk("pti->pWaitingMutex->mutex_owner_asusdebug->comm == NULL\r\n");
+				}
+
 			} else {
 				printk("pti->pWaitingMutex->mutex_owner_asusdebug == NULL\r\n");
 			}
@@ -381,6 +388,13 @@ void print_all_thread_info(void)
 					if (pti->pWaitingMutex->mutex_owner_asusdebug) {
 						save_log(" Owned by pID(%d)", pti->pWaitingMutex->mutex_owner_asusdebug->pid);
 						printk(" Owned by pID(%d)", pti->pWaitingMutex->mutex_owner_asusdebug->pid);
+						if (strlen(pti->pWaitingMutex->mutex_owner_asusdebug->comm)!=0) {
+							save_log(" %s", pti->pWaitingMutex->mutex_owner_asusdebug->comm);
+							printk(" %s", pti->pWaitingMutex->mutex_owner_asusdebug->comm);
+						} else {
+							printk("pti->pWaitingMutex->mutex_owner_asusdebug->comm == NULL\r\n");
+						}
+
 					} else {
 						printk("pti->pWaitingMutex->mutex_owner_asusdebug == NULL\r\n");
 					}
@@ -475,6 +489,13 @@ int find_thread_info(struct task_struct *pts, int force)
 				if (pti->pWaitingMutex->mutex_owner_asusdebug) {
 					save_log(" Owned by pID(%d)", pti->pWaitingMutex->mutex_owner_asusdebug->pid);
 					printk(" Owned by pID(%d)", pti->pWaitingMutex->mutex_owner_asusdebug->pid);
+					if (strlen(pti->pWaitingMutex->mutex_owner_asusdebug->comm)!=0) {
+						save_log(" %s", pti->pWaitingMutex->mutex_owner_asusdebug->comm);
+						printk(" %s", pti->pWaitingMutex->mutex_owner_asusdebug->comm);
+					} else {
+						printk("pti->pWaitingMutex->mutex_owner_asusdebug->comm == NULL\r\n");
+					}
+
 				} else {
 					printk("pti->pWaitingMutex->mutex_owner_asusdebug == NULL\r\n");
 				}

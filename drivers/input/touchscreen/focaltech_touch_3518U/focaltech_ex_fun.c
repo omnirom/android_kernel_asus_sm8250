@@ -1195,6 +1195,38 @@ static ssize_t fts_touch_report_rate_store(
 
 	return count;
 }
+
+static ssize_t fts_aod_ctrl_mode_show(
+    struct device *dev, struct device_attribute *attr, char *buf)
+{
+    int count = 0;
+
+    count = snprintf(buf + count, PAGE_SIZE, "AOD:%s\n",
+                     fts_data->aod_enable ? "On" : "Off");
+
+    return count;
+}
+
+static ssize_t fts_aod_ctrl_mode_store(
+    struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+    // listen vendor.asus.touch_control_aod
+    if (FTS_SYSFS_ECHO_ON(buf)) {
+        if (!fts_data->aod_enable) {
+            FTS_DEBUG("Notify AOD enable");
+            fts_data->aod_enable = ENABLE;
+        }
+    } else if (FTS_SYSFS_ECHO_OFF(buf)) {
+        if (fts_data->aod_enable) {
+            FTS_DEBUG("Notify AOD disable");
+            fts_data->aod_enable = DISABLE;
+        }
+    }
+
+    FTS_DEBUG("Notify AOD:%d", fts_data->aod_enable);
+    return count;
+}
+
 // ASUS_SZ_BSP Asus features ---
 
 /* get the fw version  example:cat fw_version */
@@ -1224,7 +1256,7 @@ static DEVICE_ATTR(fts_irq, S_IRUGO | S_IWUSR, fts_irq_show, fts_irq_store);
 static DEVICE_ATTR(fts_boot_mode, S_IRUGO | S_IWUSR, fts_bootmode_show, fts_bootmode_store);
 static DEVICE_ATTR(fts_touch_point, S_IRUGO | S_IWUSR, fts_tpbuf_show, fts_tpbuf_store);
 static DEVICE_ATTR(fts_log_level, S_IRUGO | S_IWUSR, fts_log_level_show, fts_log_level_store);
-
+static DEVICE_ATTR(fts_aod_ctrl_mode, S_IRUGO | S_IWUSR, fts_aod_ctrl_mode_show, fts_aod_ctrl_mode_store);
 // ASUS_SZ_BSP Asus features +++
 static DEVICE_ATTR(touch_status, S_IRUGO | S_IWUSR, fts_touch_status_show, NULL);
 static DEVICE_ATTR(touch_disable, S_IRUGO | S_IWUSR, fts_touch_disable_show, fts_touch_disable_store);
@@ -1245,6 +1277,7 @@ static struct attribute *fts_attributes[] = {
     &dev_attr_fts_boot_mode.attr,
     &dev_attr_fts_touch_point.attr,
     &dev_attr_fts_log_level.attr,
+    &dev_attr_fts_aod_ctrl_mode.attr,
     &dev_attr_touch_status.attr,	// ASUS_SZ_BSP Yadong
     &dev_attr_touch_disable.attr,
     &dev_attr_touch_report_rate.attr,

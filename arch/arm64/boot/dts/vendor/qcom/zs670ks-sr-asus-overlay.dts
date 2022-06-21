@@ -136,7 +136,7 @@
 	qcom,parallel-output-mode = <1>;
 };
 
- &thermal_zones { 	
+&thermal_zones { 	
 	virtual-therm {
 		polling-delay-passive = <0>;
 		polling-delay = <0>;
@@ -151,6 +151,45 @@
 		};
 	};
 };
+
+#include <dt-bindings/thermal/qmi_thermal.h>
+
+&thermal_zones { 	
+        asusmdm-step {
+                polling-delay-passive = <0>;
+                polling-delay = <0>; //TODO? use 1000 as evb use as 1000
+                thermal-governor = "step_wise";
+                thermal-sensors = <&qmi_sensor
+				(QMI_MODEM_NR_INST_ID+QMI_SYS_THERM_2)>;
+                wake-capable-sensor;
+                trips {
+                        asusmdm_trip0: active-config0 {
+                                temperature = <43000>;
+                                hysteresis = <1000>;
+                                type = "passive";
+                        };
+
+                        asusmdm_trip1: active-config1 {
+                                temperature = <45000>;
+                                hysteresis = <1000>;
+                                type = "passive";
+                        };
+                };
+               cooling-maps {
+                        asusmdm_lvl0 {
+                                trip = <&asusmdm_trip0>;
+                                cooling-device = <&modem_skin 1 1>;
+                        };
+
+                        asusmdm_lvl1 {
+                                trip = <&asusmdm_trip1>;
+                                cooling-device = <&modem_skin 2 2>;
+                        };
+                };
+		};
+};
+
+
 
 &soc {
 	wlansr: qcom,cnss-qca6390@b0000000 {

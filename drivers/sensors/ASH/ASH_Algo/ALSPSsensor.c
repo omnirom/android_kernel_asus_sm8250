@@ -159,6 +159,9 @@ struct psensor_data
 	int crosstalk_diff;
 
 	int selection;
+
+	/* ASUS BSP: add psensor recovery status for re-autok issue */
+	int recovery_mode;
 };
 
 struct lsensor_data 
@@ -377,6 +380,9 @@ static void psensor_onoff_recovery(bool bOn){
 		}else{ //psensor off
 			if(g_ps_data->HAL_switch_on == true){
 				log("Close psensor temporary");
+				/* ASUS BSP: add psensor recovery status for re-autok issue */
+				g_ps_data->recovery_mode = true;
+
 				proximity_turn_onoff(bOn);
 			}else{
 				psensor_report_abs(-1);
@@ -425,7 +431,10 @@ static int proximity_turn_onoff(bool bOn)
 
 		/*check the min for auto calibration*/
 		if(true == g_ps_data->autok){
-			g_ps_data->crosstalk_diff = 0;
+			/* ASUS BSP: add psensor recovery status for re-autok issue */
+			if(g_ps_data->recovery_mode != true){
+				g_ps_data->crosstalk_diff = 0;
+			}
 			/*Stage 1 : check first 6 adc which spend about 50ms~100ms*/
 			ret = proximity_check_minCT();
 			if (ret < 0) {	
@@ -1510,6 +1519,9 @@ static int mproximity_store_switch_onoff(bool bOn)
 	log("Proximity switch = %d.\n", bOn);		
 	if ((g_ps_data->Device_switch_on != bOn))	{						
 		if (bOn == true)	{
+			/* ASUS BSP: add psensor recovery status for re-autok issue */
+			g_ps_data->recovery_mode = false;
+
 			/* Turn on Proxomity */
 			g_ps_data->HAL_switch_on = true;
 			proximity_turn_on_check();
@@ -1521,6 +1533,7 @@ static int mproximity_store_switch_onoff(bool bOn)
 			g_ps_data->g_ps_int_status = ALSPS_INT_PS_INIT;
 			psensor_report_abs(-1);
 			//ftxxxx_disable_touch(false);
+
 		}			
 	}else{
 		log("Proximity is already %s", bOn?"ON":"OFF");
@@ -2337,38 +2350,43 @@ static int proximity_check_minCT(void)
 	int crosstalk_limit = 0;
 	int ret;
 	int round;
-	
-	/*check the crosstalk calibration value*/	
-	ret = psensor_factory_read_inf(PSENSOR_INF_CALIBRATION_FILE);	
-	if(ret >= 0) {
-	    	g_ps_data->g_ps_calvalue_inf= ret;
-		log("Proximity read INF Calibration : %d\n", g_ps_data->g_ps_calvalue_inf);
-	}else{
-		g_ps_data->g_ps_calvalue_inf = g_ps_data->g_ps_factory_cal_inf;
-		err("Proximity read DEFAULT INF Calibration : %d\n", g_ps_data->g_ps_calvalue_inf);
-	}
 
-	/*update the min crosstalk value*/
-	for(round=0; round<PROXIMITY_AUTOK_COUNT; round++){	
-		mdelay(PROXIMITY_AUTOK_DELAY);
-		adc_value = ALSPS_hw_client->mpsensor_hw->proximity_hw_get_adc();
-		log("proximity auto calibration adc : %d\n", adc_value);
-		if(adc_value < crosstalk_min ){
-			crosstalk_min = adc_value;
-			log("Update the min for crosstalk : %d\n", crosstalk_min);
+	/* ASUS BSP: add psensor recovery status for re-autok issue */
+	if(g_ps_data->recovery_mode == true){
+		log("apply previous crosstalk diff when psensor is on recovery mode, crosstalk = %d", g_ps_data->crosstalk_diff);
+		crosstalk_diff = g_ps_data->crosstalk_diff;
+	}else{
+		/*check the crosstalk calibration value*/	
+		ret = psensor_factory_read_inf(PSENSOR_INF_CALIBRATION_FILE);	
+		if(ret >= 0) {
+		    	g_ps_data->g_ps_calvalue_inf= ret;
+			log("Proximity read INF Calibration : %d\n", g_ps_data->g_ps_calvalue_inf);
+		}else{
+			g_ps_data->g_ps_calvalue_inf = g_ps_data->g_ps_factory_cal_inf;
+			err("Proximity read DEFAULT INF Calibration : %d\n", g_ps_data->g_ps_calvalue_inf);
 		}
+
+		/*update the min crosstalk value*/
+		for(round=0; round<PROXIMITY_AUTOK_COUNT; round++){	
+			mdelay(PROXIMITY_AUTOK_DELAY);
+			adc_value = ALSPS_hw_client->mpsensor_hw->proximity_hw_get_adc();
+			log("proximity auto calibration adc : %d\n", adc_value);
+			if(adc_value < crosstalk_min ){
+				crosstalk_min = adc_value;
+				log("Update the min for crosstalk : %d\n", crosstalk_min);
+			}
+		}
+		
+		/*Set Proximity Threshold*/
+		ret = proximity_set_threshold();
+		if (ret < 0) {	
+			err("proximity_set_threshold ERROR\n");
+			return ret;
+		}
+		
+		/*update the diff crosstalk value*/
+		crosstalk_diff = crosstalk_min -g_ps_data->g_ps_calvalue_inf;
 	}
-	
-	/*Set Proximity Threshold*/
-	ret = proximity_set_threshold();
-	if (ret < 0) {	
-		err("proximity_set_threshold ERROR\n");
-		return ret;
-	}
-	
-	/*update the diff crosstalk value*/
-	crosstalk_diff = crosstalk_min -g_ps_data->g_ps_calvalue_inf;
-	
 	if(crosstalk_diff>g_ps_data->g_ps_autok_min && crosstalk_diff<g_ps_data->g_ps_autok_max){
 		log("Update the diff for crosstalk : %d\n", crosstalk_diff);
 
@@ -2379,7 +2397,7 @@ static int proximity_check_minCT(void)
 			crosstalk_diff = crosstalk_limit;
 		}
 		//ASUS BSP Clay ---
-		
+
 		g_ps_data->crosstalk_diff = crosstalk_diff;
 
 		if(ALSPS_hw_client->mpsensor_hw->proximity_hw_set_autoK == NULL) {
@@ -2644,6 +2662,8 @@ static int init_data(void)
 	g_ps_data->HAL_switch_on =    false;	
 	g_ps_data->polling_mode =     true;
 	g_ps_data->autok =            true;
+	/* ASUS BSP: add psensor recovery status for re-autok issue */
+	g_ps_data->recovery_mode = false;
 	
 #ifdef ASUS_ZS661KS_PROJECT
 	if(g_ASUS_hwID <= HW_REV_ER2){

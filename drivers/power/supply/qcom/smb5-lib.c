@@ -149,6 +149,7 @@ extern void asus_charger_smb1390_setting(void);
 extern void focal_usb_detection(bool);
 extern int suspend_value;
 extern int g_ftm_mode;
+extern char *saved_command_line;
 
 int is_asus_vid;
 bool second_apsd=false;
@@ -5332,7 +5333,7 @@ int smblib_set_prop_pd_active(struct smb_charger *chg,
 	{
 		if(smartchg_slow_flag)
 		{
-				if(slow_charginglimit == 10)
+				if(slow_charginglimit == 10 || slow_charginglimit == 9 || slow_charginglimit == 12)
 				{
 					asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, 1000000);
 				}
@@ -5347,7 +5348,7 @@ int smblib_set_prop_pd_active(struct smb_charger *chg,
 		if(smartchg_slow_flag)
 		{
 				asus_disable_smb1390(true);
-				if(slow_charginglimit == 10)
+				if(slow_charginglimit == 10 || slow_charginglimit == 9 || slow_charginglimit == 12)
 				{
 					asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, 1500000);
 				}
@@ -5939,6 +5940,7 @@ void asus_typec_removal_function(struct smb_charger *chg)
 	cancel_delayed_work(&chg->asus_panel_check_work);
 	cancel_delayed_work(&chg->asus_hvdcp3_setting_work);
 	cancel_delayed_work(&chg->asus_hvdcp3_18W_workaround_work);
+	cancel_delayed_work(&chg->safety_timer_resume_charging_work);
 	
 	is_asus_vid=0;
 	second_apsd=false;
@@ -7648,8 +7650,49 @@ irqreturn_t default_irq_handler(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
 	struct smb_charger *chg = irq_data->parent_data;
+	u8 stat;
+	int rc;
+	u8 reg_data;
 
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: %s\n", irq_data->name);
+	if (!strcmp(irq_data->name, "chgr-error")) {
+		rc = smblib_read(chg, BATTERY_CHARGER_STATUS_2_REG, &stat);
+		if (rc < 0) {
+			smblib_err(chg, "Couldn't read BATTERY_CHARGER_STATUS_2 rc=%d\n",
+				rc);
+			return IRQ_HANDLED;
+		}
+
+		if (stat & CHARGER_ERROR_STATUS_SFT_EXPIRE_BIT) {
+			pr_info_ratelimited("IRQ: %s: Safety Timer Expired\n", irq_data->name);
+			if (strstr(saved_command_line, "androidboot.serialno=TAIPEI00066")
+				|| strstr(saved_command_line, "androidboot.serialno=TAIPEI00033")
+				|| strstr(saved_command_line, "androidboot.serialno=TAIPEI00042")
+				|| strstr(saved_command_line, "androidboot.serialno=TAIPEI00020")
+				|| strstr(saved_command_line, "androidboot.serialno=L4AIBP000170GB7")
+				|| strstr(saved_command_line, "androidboot.serialno=L6AIB7N00419XVG"))
+			{
+				vote(chg->chg_disable_votable, ASUS_DISABLE_CHARGER_VOTER, true, 0);
+				rc = smblib_write(chg, CHARGING_ENABLE_CMD_REG, 0);
+				if (rc < 0) {
+					smblib_err(chg, "Couldn't write 0 to CHARGING_ENABLE_CMD_REG rc=%d\n", rc);
+				}
+
+				rc = smblib_read(chg, CHARGING_ENABLE_CMD_REG, &reg_data);
+				pr_info_ratelimited("CHARGING_ENABLE_CMD_REG: 0x%X\n", reg_data);
+				if (reg_data != 0) {
+					smblib_err(chg, "Failed to write 0 to CHARGING_ENABLE_CMD_REG rc=%d\n", rc);
+				} else {
+					pr_info_ratelimited("charging disabled\n");
+				}
+				schedule_delayed_work(&chg->safety_timer_resume_charging_work, msecs_to_jiffies(10000));
+			}
+		}
+		if (stat & CHARGER_ERROR_STATUS_BAT_OV_BIT)
+			pr_info_ratelimited("IRQ: %s: Battery Overvoltage\n", irq_data->name);
+		if (stat & CHARGER_ERROR_STATUS_BAT_MISSING_BIT)
+			pr_info_ratelimited("IRQ: %s: Battery Missing\n", irq_data->name);
+	}
 	return IRQ_HANDLED;
 }
 
@@ -10782,9 +10825,9 @@ static void asus_hvdcp3_18W_workaround_work(struct work_struct *work)
 
 			if(smartchg_slow_flag)
 			{
-				if(slow_charginglimit == 10)
+				if(slow_charginglimit == 10 || slow_charginglimit == 9)
 				{
-						CHG_DBG_E("slow charging = 10W ,QC3 limit pm8150b ICL 1A\n");
+						CHG_DBG_E("slow charging = %dW ,QC3 limit pm8150b ICL 1A\n", slow_charginglimit);
 						asus_exclusive_vote(chg->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, 1000000);
 				}
 			}
@@ -10867,27 +10910,32 @@ static void asus_hvdcp3_setting_work(struct work_struct *work)
 		{
 			bat_volt = asus_get_prop_batt_volt(smbchg_dev);
 			smblib_get_prop_usb_voltage_now(smbchg_dev, &voltage_val);
-			if(slow_charginglimit == 10)
+			if(slow_charginglimit == 10 || slow_charginglimit == 9 || slow_charginglimit == 12)
 			{
 
 				CHG_DBG_E("10W check vbus %d \n",voltage_val.intval);
 				if(voltage_val.intval > 8000000) // QC3
 				{
 					is_QC2_HVDCP = false;
-					if(bat_volt >= 4000000)
+					if(bat_volt >= 4000000 && slow_charginglimit != 12)
 					{
-						CHG_DBG_E("slow charging = 10W ,QC3 limit pm8150b ICL 1A\n");
+						CHG_DBG_E("slow charging = %dW ,QC3 limit pm8150b ICL 1A\n", slow_charginglimit);
 						asus_exclusive_vote(chg->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, 1000000);
+					}
+					else if (bat_volt >= 4000000 && slow_charginglimit == 12)
+					{
+						CHG_DBG_E("slow charging = %dW ,QC3 limit pm8150b ICL 1.5A\n", slow_charginglimit);
+						asus_exclusive_vote(chg->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, 1500000);
 					}
 					else
 					{
-						CHG_DBG_E("slow charging = 10W ,QC3 limit pm8150b ICL 1.5A\n");
+						CHG_DBG_E("slow charging = %dW ,QC3 limit pm8150b ICL 1.5A\n", slow_charginglimit);
 						asus_exclusive_vote(chg->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, 1500000);
 					}
 				}
 				else //QC2
 				{
-						CHG_DBG_E("slow charging = 10W ,QC2 limit pm8150b ICL 1A\n");
+						CHG_DBG_E("slow charging = %dW ,QC2 limit pm8150b ICL 1A\n", slow_charginglimit);
 						asus_exclusive_vote(chg->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, 1000000);
 				}
 			}
@@ -11209,6 +11257,30 @@ void asus_usb_thermal_work(struct work_struct *work)
 }
 //[---]ASUS : Add usb thermal alert feature
 
+
+static void safety_timer_resume_charging_work(struct work_struct *work)
+{
+	struct delayed_work *delayed_work = to_delayed_work(work);
+	struct smb_charger *chg = container_of(delayed_work, struct smb_charger,
+							safety_timer_resume_charging_work);
+	int rc;
+	u8 reg_data;
+
+	vote(chg->chg_disable_votable, ASUS_DISABLE_CHARGER_VOTER, false, 0);
+	rc = smblib_write(chg, CHARGING_ENABLE_CMD_REG, 1);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't write 1 to CHARGING_ENABLE_CMD_REG rc=%d\n", rc);
+	}
+
+	rc = smblib_read(chg, CHARGING_ENABLE_CMD_REG, &reg_data);
+	pr_info_ratelimited("CHARGING_ENABLE_CMD_REG: 0x%X\n", reg_data);
+	if (reg_data != 0) {
+		smblib_err(chg, "Failed to write 1 to CHARGING_ENABLE_CMD_REG rc=%d\n", rc);
+	} else {
+		pr_info_ratelimited("charging enabled\n");
+	}
+}
+
 //[+++]ASUS : Show "+" on charging icon
 #define SWITCH_QC_NOT_QUICK_CHARGING_30W    6
 #define SWITCH_QC_QUICK_CHARGING_30W        5
@@ -11528,6 +11600,7 @@ int smblib_init(struct smb_charger *chg)
 
 	INIT_DELAYED_WORK(&chg->role_reversal_check,
 					smblib_typec_role_check_work);
+	INIT_DELAYED_WORK(&chg->safety_timer_resume_charging_work, safety_timer_resume_charging_work);
 
 	if (chg->wa_flags & CHG_TERMINATION_WA) {
 		INIT_WORK(&chg->chg_termination_work,
