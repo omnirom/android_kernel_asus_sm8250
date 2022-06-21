@@ -187,6 +187,7 @@ struct fts_ts_data {
     bool swipeup_mode;
     bool music_control;
     bool game_mode;         /* game mode enable or disable, default: disable */
+    bool aod_enable;
     int rotation_type;      /* rotation type 0/1/2, default: 0 */
     u8 gesture_type;        /* 8 bit: music_control V Z M e S W Main_Switch */
     /* multi-touch */

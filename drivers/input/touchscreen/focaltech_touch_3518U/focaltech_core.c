@@ -594,7 +594,7 @@ static int fts_read_touchdata(struct fts_ts_data *data)
     buf[0] = 0x01;
 
     if (data->gesture_mode && ts_data->suspended) {
-	if ((fts_data->gesture_mode_enable == 1) || (fts_data->dclick_mode == 1) || (fts_data->swipeup_mode == 1)) {
+	if ((fts_data->gesture_mode_enable == 1) || (fts_data->dclick_mode == 1) || (fts_data->swipeup_mode == 1) || (fts_data->aod_enable == 1)) {
 		if (0 == fts_gesture_readdata(data, NULL)) {
 			FTS_INFO("succuss to get gesture data in irq handler");
 			return 1;
@@ -1612,7 +1612,7 @@ int fts_ts_suspend(void)
     fts_esdcheck_suspend();
 #endif
 
-    if ((fts_data->gesture_mode_enable == 1) || (fts_data->dclick_mode == 1) || (fts_data->swipeup_mode == 1)) {
+    if ((fts_data->gesture_mode_enable == 1) || (fts_data->dclick_mode == 1) || (fts_data->swipeup_mode == 1) || (fts_data->aod_enable == 1)) {
             printk("gestures function enable,run fts_gesture_suspend. \n");
             fts_gesture_suspend(ts_data);
     } else {
@@ -1625,7 +1625,7 @@ int fts_ts_suspend(void)
 
         if (!ts_data->ic_info.is_incell) {
 #if FTS_POWER_SOURCE_CUST_EN
-    if ((fts_data->gesture_mode_enable == 0) && (fts_data->dclick_mode == 0) && (fts_data->swipeup_mode == 0)) {
+    if ((fts_data->gesture_mode_enable == 0) && (fts_data->dclick_mode == 0) && (fts_data->swipeup_mode == 0) && ((fts_data->aod_enable == 0))) {
             printk("no gesture function,run fts_power_source_suspend. \n");
             ret = fts_power_source_suspend(ts_data);
     }
@@ -1680,7 +1680,7 @@ static void focal_resume_work(struct work_struct *work)
     fts_esdcheck_resume();
 #endif
 
-    if ((fts_data->gesture_mode_enable == 1) || (fts_data->dclick_mode == 1) || (fts_data->swipeup_mode == 1)) {
+    if ((fts_data->gesture_mode_enable == 1) || (fts_data->dclick_mode == 1) || (fts_data->swipeup_mode == 1) || (fts_data->aod_enable == 1)) {
             fts_gesture_resume(ts_data);
     } else {
         fts_irq_enable();
@@ -1766,6 +1766,7 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
     fts_data->dclick_mode = 0;
     fts_data->swipeup_mode = 0;
     fts_data->music_control = 0;
+    fts_data->aod_enable = 0;
 // ASUS_SZ_BSP ---
 
     ret = fts_ts_probe_entry(ts_data);
@@ -1791,7 +1792,7 @@ static void focal_readgesture_work(struct work_struct *work)
 {
 	FTS_FUNC_ENTER();
 	mutex_lock(&fts_data->resume_mutex);
-	if ((fts_data->gesture_mode_enable == 1) || (fts_data->dclick_mode == 1) || (fts_data->swipeup_mode == 1)) {
+	if ((fts_data->gesture_mode_enable == 1) || (fts_data->dclick_mode == 1) || (fts_data->swipeup_mode == 1) || (fts_data->aod_enable == 1)) {
 		fts_gesture_readdata(fts_data, NULL);
 	}
 	mutex_unlock(&fts_data->resume_mutex);

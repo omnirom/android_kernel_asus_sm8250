@@ -523,6 +523,7 @@ struct smb_charger {
 	struct delayed_work  asus_hvdcp3_18W_workaround_work;
 	struct delayed_work	asus_jeta_cc2_work;
 #endif
+	struct delayed_work	safety_timer_resume_charging_work;
 
 	/* asus variables */
 	bool asus_print_usb_src_change;  //Trim the log of usb_source_change_irq
