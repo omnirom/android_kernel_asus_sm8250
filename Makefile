@@ -701,6 +701,10 @@ endif
 
 KBUILD_CPPFLAGS += -DASUS_SW_VER=\"omnirom\"
 
+ifneq ($(ASUS_BUILD_NUMBER_CHIPCODE),)
+	KBUILD_CPPFLAGS += -DASUS_SW_VER_CHIP=\"$(TARGET_SKU)-$(ASUS_BUILD_NUMBER_CHIPCODE)\"
+endif
+
 include scripts/Makefile.kcov
 include scripts/Makefile.gcc-plugins
 
