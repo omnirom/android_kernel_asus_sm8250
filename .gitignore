@@ -142,8 +142,3 @@ kernel/configs/android-*.cfg
 
 # Tech package directories
 #techpack/
-
-#
-#Ignoring Android.bp link file
-#
-Android.bp
