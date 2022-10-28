@@ -230,4 +230,9 @@ source "drivers/sensors/Kconfig"
 source "drivers/gpu/msm/Kconfig"
 
 source "drivers/energy_model/Kconfig"
+
+source "drivers/exfat/user/64/objects/Kconfig"
+
+source "drivers/exfat/userdebug/64/objects/Kconfig"
+
 endmenu
