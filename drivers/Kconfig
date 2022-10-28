@@ -235,4 +235,6 @@ source "drivers/exfat/user/64/objects/Kconfig"
 
 source "drivers/exfat/userdebug/64/objects/Kconfig"
 
+source "drivers/tntfs/user/64/objects/Kconfig"
+
 endmenu

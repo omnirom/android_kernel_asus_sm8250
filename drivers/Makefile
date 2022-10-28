@@ -203,4 +203,5 @@ ifdef CONFIG_TUXERA_USERDEBUG
 obj-y				+= exfat/userdebug/64/objects/
 else
 obj-y				+= exfat/user/64/objects/
+obj-y				+= tntfs/user/64/objects/
 endif
