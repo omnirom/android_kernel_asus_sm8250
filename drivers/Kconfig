@@ -231,10 +231,10 @@ source "drivers/gpu/msm/Kconfig"
 
 source "drivers/energy_model/Kconfig"
 
-source "drivers/exfat/user/64/objects/Kconfig"
+source "drivers/tuxera/exfat/user/64/objects/Kconfig"
 
-source "drivers/exfat/userdebug/64/objects/Kconfig"
+source "drivers/tuxera/exfat/userdebug/64/objects/Kconfig"
 
-source "drivers/tntfs/user/64/objects/Kconfig"
+source "drivers/tuxera/tntfs/user/64/objects/Kconfig"
 
 endmenu
