@@ -672,6 +672,37 @@ static struct notifier_block goodix_noti_block = {
 	.notifier_call = goodix_fb_state_chg_callback,
 };
 
+static ssize_t proximity_state_set(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct gf_dev *gf_dev = dev_get_drvdata(dev);
+	int rc, val;
+
+	rc = kstrtoint(buf, 10, &val);
+	if (rc)
+		return -EINVAL;
+
+	gf_dev->proximity_state = !!val;
+
+	if (gf_dev->proximity_state) {
+		gf_disable_irq(gf_dev);
+	} else {
+		gf_enable_irq(gf_dev);
+	}
+
+	return count;
+}
+static DEVICE_ATTR(proximity_state, S_IWUSR, NULL, proximity_state_set);
+
+static struct attribute *attributes[] = {
+	&dev_attr_proximity_state.attr,
+	NULL
+};
+
+static const struct attribute_group attribute_group = {
+	.attrs = attributes,
+};
+
 static struct class *gf_class;
 #if defined(USE_SPI_BUS)
 static int gf_probe(struct spi_device *spi)
@@ -760,6 +791,15 @@ static int gf_probe(struct platform_device *pdev)
 
 	gf_dev->irq = gf_irq_num(gf_dev);
 
+
+	dev_set_drvdata(dev, gf_dev);
+
+	status = sysfs_create_group(&dev->kobj, &attribute_group);
+	if (status) {
+		dev_err(dev, "could not create sysfs\n");
+		goto error_hw;
+	}
+
 	gf_dev->ws = wakeup_source_register(dev, "fp_wakelock");
 	status = request_threaded_irq(gf_dev->irq, NULL, gf_irq,
 			IRQF_TRIGGER_RISING | IRQF_ONESHOT,
@@ -828,6 +868,8 @@ static int gf_remove(struct platform_device *pdev)
 	clear_bit(MINOR(gf_dev->devt), minors);
 	if (gf_dev->users == 0)
 		gf_cleanup(gf_dev);
+
+	sysfs_remove_group(&gf_dev->spi->dev.kobj, &attribute_group);
 
 	mutex_unlock(&device_list_lock);
 
