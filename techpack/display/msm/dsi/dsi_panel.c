@@ -460,7 +460,7 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 {
 	int rc = 0;
 
-	pr_err("[Display] panel power on +++\n");
+	DSI_DEBUG("[Display] panel power on +++\n");
 
 	rc = dsi_pwr_enable_regulator(&panel->power_info, true);
 	if (rc) {
@@ -512,7 +512,7 @@ error_disable_vregs:
 	(void)dsi_pwr_enable_regulator(&panel->power_info, false);
 
 exit:
-	pr_err("[Display] panel power on ---\n");
+	DSI_DEBUG("[Display] panel power on ---\n");
 	return rc;
 }
 
@@ -521,7 +521,7 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 {
 	int rc = 0;
 
-	pr_err("[Display] panel power off +++\n");
+	DSI_DEBUG("[Display] panel power off +++\n");
 
 	mod_timer(&unattended_timer, jiffies + msecs_to_jiffies(1000*60*5));
 
@@ -558,7 +558,7 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 		DSI_ERR("[%s] failed to enable vregs, rc=%d\n",
 				panel->name, rc);
 
-	pr_err("[Display] panel power off ---\n");
+	DSI_DEBUG("[Display] panel power off ---\n");
 
 	return rc;
 }
@@ -700,8 +700,8 @@ int asus_judge_aod_backlight(struct dsi_panel *panel,int bl_lvl)
 		ret = 255;
 	}
 
-	pr_err("[Display] asus_judge_aod_backlight ret = %d\n",ret);
-	
+	DSI_DEBUG("[Display] asus_judge_aod_backlight ret = %d\n",ret);
+
 	return ret;
 }
 
@@ -794,7 +794,7 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 	if (panel->host_config.ext_bridge_mode)
 		return 0;
 
-	pr_err("[Display] backlight type:%d lvl:%d\n", bl->type, bl_lvl);
+	DSI_DEBUG("[Display] backlight type:%d lvl:%d\n", bl->type, bl_lvl);
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
 		rc = backlight_device_set_brightness(bl->raw_bd, bl_lvl);
