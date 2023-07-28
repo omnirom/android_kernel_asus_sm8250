@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 #include <linux/dma-buf.h>
 #include <linux/dma-mapping.h>
@@ -411,6 +411,7 @@ struct fastrpc_mmap {
 	int refs;
 	uintptr_t raddr;
 	int uncached;
+	bool is_filemap; /*flag to indicate map used in process init*/
 	int secure;
 	uintptr_t attr;
 };
@@ -476,6 +477,8 @@ struct fastrpc_file {
 	/* Flag to enable PM wake/relax voting for every remote invoke */
 	int wake_enable;
 	uint32_t ws_timeout;
+	/* Flag to indicate dynamic process creation status*/
+	bool in_process_create;
 };
 
 static struct fastrpc_apps gfa;
@@ -817,9 +820,10 @@ static int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 
 	spin_lock(&me->hlock);
 	hlist_for_each_entry_safe(map, n, &me->maps, hn) {
-		if (map->raddr == va &&
+		if (map->refs == 1 && map->raddr == va &&
 			map->raddr + map->len == va + len &&
-			map->refs == 1) {
+			/*Remove map if not used in process initialization*/
+			!map->is_filemap) {
 			match = map;
 			hlist_del_init(&map->hn);
 			break;
@@ -831,9 +835,10 @@ static int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 		return 0;
 	}
 	hlist_for_each_entry_safe(map, n, &fl->maps, hn) {
-		if (map->raddr == va &&
+		if (map->refs == 1 && map->raddr == va &&
 			map->raddr + map->len == va + len &&
-			map->refs == 1) {
+			/*Remove map if not used in process initialization*/
+			!map->is_filemap) {
 			match = map;
 			hlist_del_init(&map->hn);
 			break;
@@ -968,6 +973,7 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 	map->refs = 1;
 	map->fl = fl;
 	map->fd = fd;
+	map->is_filemap = false;
 	map->attr = attr;
 	if (mflags == ADSP_MMAP_HEAP_ADDR ||
 				mflags == ADSP_MMAP_REMOTE_HEAP_ADDR) {
@@ -2528,6 +2534,16 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 			int siglen;
 		} inbuf;
 
+		spin_lock(&fl->hlock);
+		if (fl->in_process_create) {
+			err = -EALREADY;
+			pr_err("Already in create init process");
+			spin_unlock(&fl->hlock);
+			return err;
+		}
+		fl->in_process_create = true;
+		spin_unlock(&fl->hlock);
+
 		inbuf.pgid = fl->tgid;
 		inbuf.namelen = strlen(current->comm) + 1;
 		inbuf.filelen = init->filelen;
@@ -2542,6 +2558,8 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 			VERIFY(err, !fastrpc_mmap_create(fl, init->filefd, 0,
 				init->file, init->filelen, mflags, &file));
 			mutex_unlock(&fl->map_mutex);
+			if (file)
+				file->is_filemap = true;
 			if (err)
 				goto bail;
 		}
@@ -2550,7 +2568,7 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 		VERIFY(err, !init->mem);
 		if (err) {
 			err = -EINVAL;
-			pr_err("adsprpc: %s: %s: ERROR: donated memory allocated in userspace\n",
+			pr_err("adsprpc: %s: %s: ERROR: donated memory allocated in userspace \n",
 				current->comm, __func__);
 			goto bail;
 		}
@@ -2735,6 +2753,13 @@ bail:
 		fastrpc_mmap_free(file, 0);
 		mutex_unlock(&fl->map_mutex);
 	}
+	
+	if (init->flags == FASTRPC_INIT_CREATE) {
+		spin_lock(&fl->hlock);
+		fl->in_process_create = false;
+		spin_unlock(&fl->hlock);
+	}
+	
 	return err;
 }
 
@@ -3650,6 +3675,7 @@ static int fastrpc_file_free(struct fastrpc_file *fl)
 	}
 	spin_lock(&fl->hlock);
 	fl->file_close = 1;
+	fl->in_process_create = false;
 	spin_unlock(&fl->hlock);
 	if (!IS_ERR_OR_NULL(fl->init_mem))
 		fastrpc_buf_free(fl->init_mem, 0);
@@ -4042,6 +4068,7 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	fl->cid = -1;
 	fl->dev_minor = dev_minor;
 	fl->init_mem = NULL;
+	fl->in_process_create = false;
 	memset(&fl->perf, 0, sizeof(fl->perf));
 	fl->qos_request = 0;
 	fl->dsp_proc_init = 0;
