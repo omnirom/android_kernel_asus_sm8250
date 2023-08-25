@@ -336,9 +336,7 @@ static ssize_t asus_ex_proc_glove_read(struct file *file, char __user *buf, size
 
 	mutex_lock(&input_dev->mutex);
 	fts_read_reg(FTS_REG_GLOVE_MODE_EN, &val);
-	len += snprintf(buff + len, PAGE_SIZE, "Glove Mode:%s\n",
-                     ts_data->glove_mode ? "On" : "Off");
-	len += snprintf(buff + len, PAGE_SIZE, "Glove Reg(0xC0):%d\n", val);
+	len += sprintf(buff, "%d\n", ts_data->glove_mode);
 	mutex_unlock(&input_dev->mutex);
 
 	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
