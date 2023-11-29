@@ -188,7 +188,7 @@ EOF:
 }
 
 static const char mcu_firmware_file[] = {"/vendor/firmware/mcu_firmware.txt"};
-tMSPMemorySegment* read_firmware_file() {
+tMSPMemorySegment* read_firmware_file(void) {
 	 if (read_kernel_file(mcu_firmware_file,  process_firmware_item)) {
 		 return &MSPMemory[0];
 	 }	 
@@ -196,7 +196,7 @@ tMSPMemorySegment* read_firmware_file() {
 }
 
 
-tMSPMemorySegment* MSP430BSL_parseTextFile()
+tMSPMemorySegment* MSP430BSL_parseTextFile(void)
 {
 int i;
 const int MAX_MSP_SEGMENT= sizeof(MemorySegment_Addr)/sizeof(MemorySegment_Addr[0]);
@@ -216,7 +216,7 @@ for (i=0;i<MAX_MSP_SEGMENT;i++)
     return &MSPMemory[0];
 }
 
-void MSP430BSL_cleanUpPointer()
+void MSP430BSL_cleanUpPointer(void)
 {
 	//const int MAX_MSP_SEGMENT= sizeof(firmwareSegment)/sizeof(firmwareSegment[0]);
 	const int MAX_MSP_SEGMENT= Zen7MAX_MSP_SEGMENT;

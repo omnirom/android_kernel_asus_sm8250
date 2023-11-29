@@ -278,7 +278,7 @@ static uint32_t checkBSLReadResponse(uint32_t length)
     return MSP430_STATUS_OPERATION_OK;
 }
 
-static uint32_t checkBSLResponse()
+static uint32_t checkBSLResponse(void)
 {
     uint16_t recLength, recCrc;
 

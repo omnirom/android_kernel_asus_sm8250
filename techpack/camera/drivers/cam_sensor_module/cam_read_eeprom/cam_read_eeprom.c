@@ -260,7 +260,7 @@ static int __init cam_read_eeprom_init(void)
     return ret;
 }
 
-static void __exit cam_read_eeprom_exit()
+static void __exit cam_read_eeprom_exit(void)
 {
 	remove_proc_entry("fortune",proc_dir);
 }
