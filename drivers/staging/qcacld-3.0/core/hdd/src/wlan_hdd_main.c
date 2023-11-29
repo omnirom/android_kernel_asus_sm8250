@@ -183,8 +183,6 @@
 #include "cfg_nan_api.h"
 #include <wlan_hdd_hang_event.h>
 
-extern char* wcnss_get_driver_log_level(void);
-
 #ifdef MODULE
 #define WLAN_MODULE_NAME  module_name(THIS_MODULE)
 #else
@@ -10429,21 +10427,6 @@ static uint32_t hdd_log_level_to_bitmask(enum host_log_level user_log_level)
 	return bitmask;
 }
 
-static int a2i(const char *s)
-{
-  int sign=1;
-  int num=0;
-  if(*s == '-'){
-    sign = -1;
-    s++;
-  }
-  while(*s){
-    num=((*s)-'0')+num*10;
-    s++;
-  }
-  return num*sign;
-}
-
 
 /**
  * hdd_set_trace_level_for_each - Set trace level for each INI config
@@ -10461,9 +10444,6 @@ static void hdd_set_trace_level_for_each(struct hdd_context *hdd_ctx)
 	uint32_t bitmask;
 	uint32_t i;
 
-	char *module_idx_st = NULL;
-	char *idx = NULL;
-
 	hdd_qdf_trace_enable(QDF_MODULE_ID_DP, 0x7f);
 
 	qdf_uint8_array_parse(cfg_get(hdd_ctx->psoc,
@@ -10480,35 +10460,6 @@ static void hdd_set_trace_level_for_each(struct hdd_context *hdd_ctx)
 			hdd_qdf_trace_enable(module_id, bitmask);
 	}
 
-	module_idx_st = wcnss_get_driver_log_level();
-	if(!strcmp(module_idx_st,"disable") || !strcmp(module_idx_st,"")) {
-		hdd_info("no extra log level to be added");
-		goto config_cont;
-	} else if(i >= 1024) {
-		hdd_err("Number of items in %d >= Max config items %d" , i , 1024);
-		goto config_cont;
-	}
-
-	hdd_info("set driver log level: %s", module_idx_st);
-	bitmask = hdd_log_level_to_bitmask(HOST_LOG_LEVEL_DEBUG);
-
-	for(idx = strsep(&module_idx_st, ","); idx != NULL; idx = strsep(&module_idx_st, ",")) {
-
-		module_id = a2i(idx);
-		hdd_info("set driver log level: %s", idx);
-		if (module_id < QDF_MODULE_ID_MAX &&
-		    module_id >= QDF_MODULE_ID_MIN)
-			hdd_qdf_trace_enable(module_id, bitmask);
-
-		if (i++ >= 1024) {
-			hdd_err("too many ini item added",
-				WLAN_INI_FILE,
-				1024);
-			break;
-		}
-   }
-
-config_cont:
 	hdd_set_mtrace_for_each(hdd_ctx);
 }
 
