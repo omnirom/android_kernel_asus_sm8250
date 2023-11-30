@@ -6,7 +6,7 @@
 #ifndef _IPA3_ODL_H_
 #define _IPA3_ODL_H_
 
-#define IPA_ODL_AGGR_BYTE_LIMIT (15 * 1024)
+#define IPA_ODL_AGGR_BYTE_LIMIT 15
 #define IPA_ODL_RX_RING_SIZE 192
 #define MAX_QUEUE_TO_ODL 1024
 #define CONFIG_SUCCESS 1
@@ -58,6 +58,7 @@ struct ipa_odl_context {
 	bool odl_ctl_msg_wq_flag;
 	struct ipa3_odlstats stats;
 	u32 odl_pm_hdl;
+	wait_queue_head_t adpl_msg_waitq;
 };
 
 struct ipa3_push_msg_odl {

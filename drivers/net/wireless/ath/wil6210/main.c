@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: ISC
 /*
  * Copyright (c) 2012-2017 Qualcomm Atheros, Inc.
- * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/moduleparam.h>
@@ -22,6 +22,7 @@
 #define WIL_BOARD_FILE_MAX_NAMELEN 128
 #define WIL6210_ITR_VR_RX_MAX_BURST_DURATION (5) /* usec */
 #define WIL6210_VR_TX_RING_ORDER 10
+#define WIL6210_VR_AGG_WSIZE 16
 
 bool debug_fw; /* = false; */
 module_param(debug_fw, bool, 0444);
@@ -312,6 +313,7 @@ __acquires(&sta->tid_rx_lock) __releases(&sta->tid_rx_lock)
 	/* statistics */
 	memset(&sta->stats, 0, sizeof(sta->stats));
 	sta->stats.tx_latency_min_us = U32_MAX;
+	wil_sta_info_amsdu_init(sta);
 }
 
 static void _wil6210_disconnect_complete(struct wil6210_vif *vif,
@@ -722,6 +724,13 @@ void wil_bcast_fini_all(struct wil6210_priv *wil)
 	}
 }
 
+void wil_sta_info_amsdu_init(struct wil_sta_info *sta)
+{
+	sta->amsdu_drop_sn = -1;
+	sta->amsdu_drop_tid = -1;
+	sta->amsdu_drop = 0;
+}
+
 int wil_priv_init(struct wil6210_priv *wil)
 {
 	uint i;
@@ -805,6 +814,7 @@ int wil_priv_init(struct wil6210_priv *wil)
 
 	wil->amsdu_en = 1;
 	wil->fw_state = WIL_FW_STATE_DOWN;
+	wil->max_mcs = 0;
 
 	return 0;
 
@@ -1596,6 +1606,7 @@ int wil_vr_update_profile(struct wil6210_priv *wil, u8 profile)
 		drop_if_ring_full = false;
 		wil->rx_max_burst_duration =
 			WIL6210_ITR_RX_MAX_BURST_DURATION_DEFAULT;
+		agg_wsize = 0;
 
 		return 0;
 	}
@@ -1605,10 +1616,12 @@ int wil_vr_update_profile(struct wil6210_priv *wil, u8 profile)
 		return rc;
 
 	/* VR default configuration */
-	wil->ps_profile = WMI_PS_PROFILE_TYPE_PS_DISABLED;
+	if (profile != WMI_VR_PROFILE_COMMON_STA_PS)
+		wil->ps_profile = WMI_PS_PROFILE_TYPE_PS_DISABLED;
 	tx_ring_order = WIL6210_VR_TX_RING_ORDER;
 	drop_if_ring_full = true;
 	wil->rx_max_burst_duration = WIL6210_ITR_VR_RX_MAX_BURST_DURATION;
+	agg_wsize = WIL6210_VR_AGG_WSIZE;
 
 	return 0;
 }
@@ -2109,6 +2122,7 @@ void wil_halp_vote(struct wil6210_priv *wil)
 		if (!rc) {
 			wil_err(wil, "HALP vote timed out\n");
 			/* Mask HALP as done in case the interrupt is raised */
+			atomic_set(&wil->halp.handle_icr, 0);
 			wil6210_mask_halp(wil);
 		} else {
 			wil_dbg_irq(wil,

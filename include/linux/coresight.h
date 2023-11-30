@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2012,2017-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012,2017-2018,2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _LINUX_CORESIGHT_H
@@ -325,12 +325,14 @@ static inline void coresight_abort(void) {}
 static inline void coresight_disable_reg_clk(struct coresight_device *csdev) {}
 static inline int coresight_enable_reg_clk(struct coresight_device *csdev)
 { return -EINVAL; }
+
 //ABSP++-- Mask for build error "warning: unused function 'coresight_disable_all_source_link' [-Wunused-function]error, forbidden warning: coresight.h:328"
 #if 0
-static void coresight_disable_all_source_link(void) {};
-static void coresight_enable_all_source_link(void) {};
+static inline void coresight_disable_all_source_link(void) {};
+static inline void coresight_enable_all_source_link(void) {};
 #endif
 //ABSP+-
+
 static inline int coresight_claim_device_unlocked(void __iomem *base)
 {
 	return -EINVAL;

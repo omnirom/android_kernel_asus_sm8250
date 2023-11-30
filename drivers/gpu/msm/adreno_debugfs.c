@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2002,2008-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2002,2008-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -147,11 +147,22 @@ static void sync_event_print(struct seq_file *s,
 		break;
 	}
 	case KGSL_CMD_SYNCPOINT_TYPE_FENCE: {
+		struct event_fence_info *info = sync_event ?
+				sync_event->priv : NULL;
 		int i;
 
-		for (i = 0; i < sync_event->info.num_fences; i++)
+		for (i = 0; info && i < info->num_fences; i++)
 			seq_printf(s, "sync: %s",
-				sync_event->info.fences[i].name);
+				info->fences[i].name);
+		break;
+	}
+	case KGSL_CMD_SYNCPOINT_TYPE_TIMELINE: {
+		struct event_timeline_info *info = sync_event->priv;
+		int j;
+
+		for (j = 0; info && info[j].timeline; j++)
+			seq_printf(s, "timeline: %d seqno: %d",
+				info[j].timeline, info[j].seqno);
 		break;
 	}
 	default:
@@ -168,9 +179,9 @@ struct flag_entry {
 static const struct flag_entry drawobj_flags[] = {KGSL_DRAWOBJ_FLAGS};
 
 static const struct flag_entry cmdobj_priv[] = {
-	{ CMDOBJ_SKIP, "skip"},
-	{ CMDOBJ_FORCE_PREAMBLE, "force_preamble"},
-	{ CMDOBJ_WFI, "wait_for_idle" },
+	{ BIT(CMDOBJ_SKIP), "skip"},
+	{ BIT(CMDOBJ_FORCE_PREAMBLE), "force_preamble"},
+	{ BIT(CMDOBJ_WFI), "wait_for_idle" },
 };
 
 static const struct flag_entry context_flags[] = {KGSL_CONTEXT_FLAGS};
@@ -180,15 +191,15 @@ static const struct flag_entry context_flags[] = {KGSL_CONTEXT_FLAGS};
  * KGSL_CONTEXT_PRIV_DEVICE_SPECIFIC so it is ok to cross the streams here.
  */
 static const struct flag_entry context_priv[] = {
-	{ KGSL_CONTEXT_PRIV_SUBMITTED, "submitted"},
-	{ KGSL_CONTEXT_PRIV_DETACHED, "detached"},
-	{ KGSL_CONTEXT_PRIV_INVALID, "invalid"},
-	{ KGSL_CONTEXT_PRIV_PAGEFAULT, "pagefault"},
-	{ ADRENO_CONTEXT_FAULT, "fault"},
-	{ ADRENO_CONTEXT_GPU_HANG, "gpu_hang"},
-	{ ADRENO_CONTEXT_GPU_HANG_FT, "gpu_hang_ft"},
-	{ ADRENO_CONTEXT_SKIP_EOF, "skip_end_of_frame" },
-	{ ADRENO_CONTEXT_FORCE_PREAMBLE, "force_preamble"},
+	{ BIT(KGSL_CONTEXT_PRIV_SUBMITTED), "submitted"},
+	{ BIT(KGSL_CONTEXT_PRIV_DETACHED), "detached"},
+	{ BIT(KGSL_CONTEXT_PRIV_INVALID), "invalid"},
+	{ BIT(KGSL_CONTEXT_PRIV_PAGEFAULT), "pagefault"},
+	{ BIT(ADRENO_CONTEXT_FAULT), "fault"},
+	{ BIT(ADRENO_CONTEXT_GPU_HANG), "gpu_hang"},
+	{ BIT(ADRENO_CONTEXT_GPU_HANG_FT), "gpu_hang_ft"},
+	{ BIT(ADRENO_CONTEXT_SKIP_EOF), "skip_end_of_frame" },
+	{ BIT(ADRENO_CONTEXT_FORCE_PREAMBLE), "force_preamble"},
 };
 
 static void print_flags(struct seq_file *s, const struct flag_entry *table,

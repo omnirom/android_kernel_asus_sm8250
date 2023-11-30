@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020,2021 The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s:%s " fmt, KBUILD_MODNAME, __func__
@@ -56,6 +56,9 @@ enum qmi_ts_sensor {
 	QMI_SYS_THERM1,
 	QMI_SYS_THERM2,
 	QMI_TS_TSENS_1,
+	QMI_TS_BEAMER_W_THERM,
+	QMI_TS_BEAMER_N_THERM,
+	QMI_TS_BEAMER_E_THERM,
 	QMI_TS_MAX_NR
 };
 
@@ -113,12 +116,15 @@ static char sensor_clients[QMI_TS_MAX_NR][QMI_CLIENT_NAME_LENGTH] = {
 	{"sys_therm1"},
 	{"sys_therm2"},
 	{"modem_tsens1"},
+	{"BEAMER_W_THERM"},
+	{"BEAMER_N_THERM"},
+	{"BEAMER_E_THERM"},
 };
 
 static int32_t encode_qmi(int32_t val)
 {
 	uint32_t shift = 0, local_val = 0;
-	int32_t temp_val = 0;
+	unsigned long temp_val = 0;
 
 	if (val == INT_MAX || val == INT_MIN)
 		return 0;
@@ -128,8 +134,7 @@ static int32_t encode_qmi(int32_t val)
 		temp_val *= -1;
 		local_val |= 1 << QMI_FL_SIGN_BIT;
 	}
-	shift = find_last_bit((const unsigned long *)&temp_val,
-			sizeof(temp_val) * 8);
+	shift = find_last_bit(&temp_val, sizeof(temp_val) * 8);
 	local_val |= ((shift + 127) << QMI_MANTISSA_MSB);
 	temp_val &= ~(1 << shift);
 
@@ -273,6 +278,13 @@ static int qmi_ts_request(struct qmi_sensor *qmi_sens,
 			qmi_sens->low_thresh != INT_MIN;
 		req.temp_threshold_low =
 			encode_qmi(qmi_sens->low_thresh);
+
+		pr_debug("Sensor:%s set high_trip:%d, low_trip:%d, high_valid:%d, low_valid:%d\n",
+			qmi_sens->qmi_name,
+			qmi_sens->high_thresh,
+			qmi_sens->low_thresh,
+			req.temp_threshold_high_valid,
+			req.temp_threshold_low_valid);
 	}
 
 	mutex_lock(&ts->mutex);

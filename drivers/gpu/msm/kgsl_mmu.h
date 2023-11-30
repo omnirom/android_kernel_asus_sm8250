@@ -98,7 +98,7 @@ struct kgsl_mmu_pt_ops {
 	int (*svm_range)(struct kgsl_pagetable *pt, uint64_t *lo, uint64_t *hi,
 			uint64_t memflags);
 	bool (*addr_in_range)(struct kgsl_pagetable *pagetable,
-			uint64_t, uint64_t);
+			uint64_t gpuaddr, uint64_t size);
 	int (*mmu_map_offset)(struct kgsl_pagetable *pt,
 			uint64_t virtaddr, uint64_t virtoffset,
 			struct kgsl_memdesc *memdesc, uint64_t physoffset,
