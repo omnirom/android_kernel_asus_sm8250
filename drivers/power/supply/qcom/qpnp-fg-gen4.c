@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"FG: %s: " fmt, __func__
@@ -37,11 +38,12 @@
 #define FG_MEM_IF_PM8150B		0x0D
 #define FG_ADC_RR_PM8150B		0x13
 
-#define SDAM_COOKIE_OFFSET		0x80
 #define SDAM_CYCLE_COUNT_OFFSET		0x81
 #define SDAM_CAP_LEARN_OFFSET		0x91
-#define SDAM_COOKIE			0xA5
 #define SDAM_FG_PARAM_LENGTH		20
+
+#define SDAM_COOKIE_OFFSET_4BYTE	0x95
+#define SDAM_COOKIE_4BYTE		0x12345678
 
 #define FG_SRAM_LEN			972
 #define PROFILE_LEN			416
@@ -742,7 +744,7 @@ static int fg_get_batt_id_adc(struct fg_gen4_chip *chip, u32 *batt_id_ohms)
 
 	batt_id_mv = div_s64(batt_id_mv, 1000);
 	if (batt_id_mv == 0) {
-		pr_info("batt_id_mv = 0 from ADC\n");
+		pr_debug("batt_id_mv = 0 from ADC\n");
 		return 0;
 	}
 
@@ -755,7 +757,7 @@ static int fg_get_batt_id_adc(struct fg_gen4_chip *chip, u32 *batt_id_ohms)
 	*batt_id_ohms = div64_u64(chip->dt.batt_id_pullup_kohms * 1000 * 1000
 					+ denom / 2, denom);
 
-	pr_info("batt_id_mv=%d, batt_id_ohms=%d\n", batt_id_mv, *batt_id_ohms);
+	pr_debug("batt_id_mv=%d, batt_id_ohms=%d\n", batt_id_mv, *batt_id_ohms);
 
 	return 0;
 }
@@ -1444,7 +1446,7 @@ static int fg_gen4_store_learned_capacity(void *data, int64_t learned_cap_uah)
 	struct fg_dev *fg;
 	int16_t cc_mah;
 	int rc;
-	u8 cookie = SDAM_COOKIE;
+	u32 cookie_4byte = SDAM_COOKIE_4BYTE;
 
 	if (!chip)
 		return -ENODEV;
@@ -1471,8 +1473,8 @@ static int fg_gen4_store_learned_capacity(void *data, int64_t learned_cap_uah)
 			return rc;
 		}
 
-		rc = nvmem_device_write(chip->fg_nvmem, SDAM_COOKIE_OFFSET, 1,
-					&cookie);
+		rc = nvmem_device_write(chip->fg_nvmem,
+			SDAM_COOKIE_OFFSET_4BYTE, 1, &cookie_4byte);
 		if (rc < 0) {
 			pr_err("Error in writing cookie to SDAM, rc=%d\n", rc);
 			return rc;
@@ -2141,7 +2143,7 @@ static int fg_gen4_get_batt_profile(struct fg_dev *fg)
 					chip->batt_age_level, &avail_age_level);
 	else
 		profile_node = of_batterydata_get_best_profile(batt_node,
-					fg->batt_id_ohms / 1000, BATT_TYPE_TEMP);
+					fg->batt_id_ohms / 1000, NULL);
 	if (IS_ERR(profile_node))
 		return PTR_ERR(profile_node);
 
@@ -2557,17 +2559,17 @@ static bool is_sdam_cookie_set(struct fg_gen4_chip *chip)
 {
 	struct fg_dev *fg = &chip->fg;
 	int rc;
-	u8 cookie;
+	u32 cookie_4byte;
 
-	rc = nvmem_device_read(chip->fg_nvmem, SDAM_COOKIE_OFFSET, 1,
-				&cookie);
+	rc = nvmem_device_read(chip->fg_nvmem, SDAM_COOKIE_OFFSET_4BYTE, 4,
+			&cookie_4byte);
 	if (rc < 0) {
 		pr_err("Error in reading SDAM_COOKIE rc=%d\n", rc);
 		return false;
 	}
 
-	fg_dbg(fg, FG_STATUS, "cookie: %x\n", cookie);
-	return (cookie == SDAM_COOKIE);
+	fg_dbg(fg, FG_STATUS, "cookie_4byte: %08x\n", cookie_4byte);
+	return (cookie_4byte == SDAM_COOKIE_4BYTE);
 }
 
 static void fg_gen4_clear_sdam(struct fg_gen4_chip *chip)
@@ -2591,8 +2593,9 @@ static void fg_gen4_clear_sdam(struct fg_gen4_chip *chip)
 static void fg_gen4_post_profile_load(struct fg_gen4_chip *chip)
 {
 	struct fg_dev *fg = &chip->fg;
-	int rc, act_cap_mah;
+	int rc = 0, act_cap_mah;
 	u8 buf[16] = {0};
+	u32 cookie_4byte = 0;
 
 	if (chip->dt.multi_profile_load &&
 		chip->batt_age_level != chip->last_batt_age_level) {
@@ -2646,6 +2649,13 @@ static void fg_gen4_post_profile_load(struct fg_gen4_chip *chip)
 				pr_err("Error in writing learned capacity to SDAM, rc=%d\n",
 					rc);
 		}
+
+		/* Set the COOKIE to prevent rechecking the SRAM again */
+		cookie_4byte = SDAM_COOKIE_4BYTE;
+		rc = nvmem_device_write(chip->fg_nvmem,
+			SDAM_COOKIE_OFFSET_4BYTE, 4, (u8 *)&cookie_4byte);
+		if (rc < 0)
+			pr_err("Failed to set SDAM cookie, rc=%d\n", rc);
 	}
 
 	/* Restore the cycle counters so that it would be valid at this point */
@@ -2653,24 +2663,6 @@ static void fg_gen4_post_profile_load(struct fg_gen4_chip *chip)
 	if (rc < 0)
 		pr_err("Error in restoring cycle_count, rc=%d\n", rc);
 
-}
-
-int force_disable_side_load(void){
-    u8 val, mask;
-    int rc;
-
-    /* Clear side loading for voltage and current */
-    val = 0;
-    mask = BIT(0);
-    pr_err("LiJen %s Clear side loading\n",__func__);
-    rc = fg_sram_masked_write(g_fg, SYS_CONFIG_WORD,
-            SYS_CONFIG_OFFSET, mask, val, FG_IMA_DEFAULT);
-    if (rc < 0) {
-        pr_err("Error in clearing SYS_CONFIG_WORD[0], rc=%d\n",
-            rc);
-        return rc;
-    }
-    return 0;
 }
 
 static void profile_load_work(struct work_struct *work)
@@ -2704,10 +2696,7 @@ static void profile_load_work(struct work_struct *work)
 		goto out;
 
 	if (!is_profile_load_required(chip))
-	{
-		force_disable_side_load();
 		goto done;
-	}
 
 	if (!chip->dt.multi_profile_load) {
 		clear_cycle_count(chip->counter);
@@ -4112,7 +4101,7 @@ static int fg_gen4_charge_full_update(struct fg_dev *fg)
 			fg_dbg(fg, FG_STATUS, "Terminated charging @ SOC%d\n",
 				msoc);
 		}
-	} else if ((msoc_raw <= recharge_soc )
+	} else if ((msoc_raw <= recharge_soc || !fg->charge_done)
 			&& fg->charge_full) {
 		if (chip->dt.linearize_soc) {
 			fg->delta_soc = FULL_CAPACITY - msoc;
@@ -5261,6 +5250,8 @@ static void soc_scale_work(struct work_struct *work)
 
 	mutex_unlock(&chip->soc_scale_lock);
 	if (chip->prev_soc_scale_msoc != chip->soc_scale_msoc) {
+		/* update MSOC */
+		fg_gen4_write_scale_msoc(chip);
 		if (batt_psy_initialized(fg))
 			power_supply_changed(fg->batt_psy);
 	}
@@ -8693,12 +8684,12 @@ static int fg_gen4_resume(struct device *dev)
 	struct fg_dev *fg = &chip->fg;
 
 //ASUS_BSP BATTERY+++
-        struct timespec mtNow;
+	struct timespec mtNow;
 
-        mtNow = current_kernel_time();
-        if (mtNow.tv_sec - g_last_print_time.tv_sec >= REPORT_CAPACITY_POLLING_TIME) {
-                qpnp_smbcharger_polling_data_worker(0);
-        }
+	mtNow = current_kernel_time();
+	if (mtNow.tv_sec - g_last_print_time.tv_sec >= REPORT_CAPACITY_POLLING_TIME) {
+		qpnp_smbcharger_polling_data_worker(0);
+	}
 
 //ASUS_BSP BATTERY ---
 
