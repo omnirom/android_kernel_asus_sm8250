@@ -201,7 +201,7 @@ obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 #Tuxera
 ifdef CONFIG_TUXERA_USERDEBUG
 obj-y				+= tuxera/exfat/userdebug/64/objects/
-else
+else ifdef CONFIG_TUXERA_ARM64
 obj-y				+= tuxera/exfat/user/64/objects/
 obj-y				+= tuxera/tntfs/user/64/objects/
 endif
