@@ -696,7 +696,7 @@ int asus_judge_aod_backlight(struct dsi_panel *panel,int bl_lvl)
 		    ret = 255;
 		}
 	} else {
-		pr_err("[Display] is not in aod mode\n");
+		DSI_DEBUG("[Display] is not in aod mode\n");
 		ret = 255;
 	}
 
