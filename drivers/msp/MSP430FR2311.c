@@ -604,13 +604,14 @@ static uint32_t resetVectorValue;
 
 static int MSP43FR2311_Go_BSL_Mode(void) {
 	uint8_t isAfterSR;
-	
+
 	waitDelayAndShowText("simulator bsl protocol");
-if ((g_ASUS_hwID == HW_REV_EVB) || (g_ASUS_hwID == HW_REV_SR) || (g_ASUS_hwID == HW_REV_SR2) || (g_ASUS_hwID == HW_REV_SR3)) 	//EVB or SR
-	isAfterSR = 1;
-else
-	isAfterSR = 0;
-	
+	if ((g_ASUS_hwID == HW_REV_EVB) || (g_ASUS_hwID == HW_REV_SR) || (g_ASUS_hwID == HW_REV_SR2) || (g_ASUS_hwID == HW_REV_SR3))  {//EVB or SR
+		isAfterSR = 1;
+	} else {
+		isAfterSR = 0;
+	}
+
 	//gpio_set_value(mcu_info->mcu_test, 0^isAfterSR);
 	gpio_set_value(mcu_info->mcu_reset, 0);
 	msleep(20);
@@ -630,7 +631,7 @@ else
 
 	D("[MCU] INFO: Invoking the BSL .\n");
 	msleep(50);	//Wait mcu hw go to bsl mode ready.
-	return MSP430BSL_invokeBSL(invokeString, 8);			
+	return MSP430BSL_invokeBSL(invokeString, 8);
 }
 
 static int MSP43FR2311_Update_Firmware_Load_File(bool bLoadFromFile) {

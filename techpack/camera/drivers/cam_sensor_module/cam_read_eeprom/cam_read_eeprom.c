@@ -37,13 +37,14 @@ static struct proc_dir_entry *proc_dir = NULL;
 static struct proc_dir_entry *proc_file = NULL;
 
 static ssize_t proc_file_read(struct file *file,char __user *buf,size_t count,loff_t *ppos) {
-    char str[3] = {0};
-    	
-    if (*ppos)
-    	return 0;
+	char str[3] = {0};
+
+	if (*ppos)
+		return 0;
+
 	sprintf(str, "%x", eeprom_camera_specs);
 	str[2] = '\n';
-	return simple_read_from_buffer(buf, count, ppos, str, sizeof(str));
+return simple_read_from_buffer(buf, count, ppos, str, sizeof(str));
 }
 
 static int proc_file_open(struct inode *inode, struct file *file) {  

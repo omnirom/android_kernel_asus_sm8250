@@ -2891,10 +2891,11 @@ bool calculation_long_full_time_reset(void){
 		//BAT_DBG("now_time=%lu;last_long_full_total_time=%lu\n", now_time, long_full_total_time);
 	}else{
 		temp_time = now_time - last_long_full_total_time;
-		if (temp_time > 0)
+		if (temp_time > 0) {
 			long_full_total_time += temp_time;
 			last_long_full_total_time = now_time;
-	}	
+		}
+	}
 
 	if(long_full_total_time >= RESET_LONG_FULL_TIME_CONDITION){
 		long_full_total_time = 0;
@@ -2926,9 +2927,10 @@ bool calculation_long_full_time_check(int bat_cur){
 		//BAT_DBG("now_time=%lu;last_long_full_check_time=%lu\n", now_time, long_full_check_time);
 	}else{
 		temp_time = now_time - last_long_full_check_time;
-		if (temp_time > 0)
+		if (temp_time > 0) {
 			long_full_check_time += temp_time;
 			last_long_full_check_time = now_time;
+		}
 	}
 
 	if(long_full_check_time >= CHECK_LONG_FULL_TIME_CONDITION){
