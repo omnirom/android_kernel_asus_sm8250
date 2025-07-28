@@ -22,7 +22,7 @@ static uint8_t	g_sensor_init_state[MAX_CAMERA_ID+1]={0};
 static uint32_t g_module_changed[MAX_CAMERA_ID + 1];
 #if 0 //ASUS Byron temp remove
 static uint8_t module_change[MAX_CAMERA_ID + 1]={0};
-static uint8_t otp_data_id[MAX_CAMERA_ID + 1][OTP_ID_LEN];
+static uint8_t otp_data_id[MAX_CAMERA_ID + 1][OTP_ID_LEN +1];
 #endif
 #include "asus_cam_sensor_utils.c"
 #include "asus_cam_sensor_spec.c"
@@ -1209,8 +1209,8 @@ static void compareCameraSN (uint8_t moduleGroupIndex)
 	int SN_Offset=0;
 
 	static uint8_t buf_cali_id[128];
-	static uint16_t buf_cali_id_tmp[OTP_ID_LEN];
-	static uint8_t otp_data[OTP_ID_LEN];
+	static uint16_t buf_cali_id_tmp[OTP_ID_LEN +1];
+	static uint8_t otp_data[OTP_ID_LEN +1];
 
 	struct file *fp;
 	mm_segment_t fs;
