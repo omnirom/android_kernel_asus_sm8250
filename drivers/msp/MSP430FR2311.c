@@ -1175,7 +1175,7 @@ static long mcu_ioctl(struct file *file, unsigned int cmd,
 	motorDrvManualConfig_t data;
 	motorCal gAngle;
 	uint8_t wBuf[9] = {0xAA, 0x55, 0x81, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-	float gPrecision = 3.456; 
+	int gPrecision = 3; 
 	unsigned int sbuf[2];	
 	MICRO_STEP microstep;
 	int special_angle = 0;
@@ -1316,9 +1316,9 @@ static long mcu_ioctl(struct file *file, unsigned int cmd,
 
 		case ASUS_MOTOR_GET_MICRO_STEP:
 		    //snprintf(nameMotor, sizeof(nameMotor), "%s", ASUS_MOTOR_DRV_DEV_PATH);
-		    gPrecision = 0.144*4*SmallAngle[7];
-			sbuf[0] = (unsigned int)gPrecision;
-			sbuf[1] = ((unsigned int)(gPrecision*1000))%1000;
+		    gPrecision = 1/2 * SmallAngle[7];
+			sbuf[0] = gPrecision;
+			sbuf[1] = (gPrecision*1000)%1000;
 			pr_err("[MCU] min_angle:%d.%d\n", sbuf[0], sbuf[1]);
 			ret = copy_to_user((int __user*)arg, &sbuf, sizeof(microstep));
 			break;

@@ -27,7 +27,7 @@
 #define		ACT_CHK_FRQ		0x0008B8E5	
 #define		ACT_CHK_NUM		3756		
 #define		ACT_THR			0x000003E8	
-#define		ACT_MARGIN		0.75f	
+#define		ACT_MARGIN		3/4
 #define		GEA_NUM			512				
 #define		GEA_DIF_HIG		0x0083			
 #define		GEA_DIF_LOW		0x0001	
@@ -1186,10 +1186,11 @@ UINT_8	ZF7_TstActMov( struct cam_ois_ctrl_t *ctrl, UINT_8 UcDirSel )
 	INT_32	SlMeasureParameterNum ;
 	INT_32	SlMeasureParameterA , SlMeasureParameterB ;
 	UnllnVal	StMeasValueA  , StMeasValueB ;
-	float		SfLimit , Sfzoom , Sflenz , Sfshift ;
+	UINT_32		SfLimit , Sfzoom , Sflenz , Sfshift ;
 	UINT_32		UlLimit , Ulzoom , Ullenz , Ulshift , UlActChkLvl ;
 	UINT_8		i;
 	UINT_32		UlReturnVal;
+	UINT_32	IntMaxValue = 2147483647;
 
 	if( UcDirSel == 0x00 ) {							
 		onsemi_read_dword( ctrl, Gyro_Limiter_X 			, ( UINT_32 * )&UlLimit ) ;	
@@ -1204,23 +1205,23 @@ UINT_8	ZF7_TstActMov( struct cam_ois_ctrl_t *ctrl, UINT_8 UcDirSel )
 	}
 
 
-	SfLimit = (float)UlLimit / (float)0x7FFFFFFF;
+	SfLimit = UlLimit / IntMaxValue;
 	if( Ulzoom == 0){
 		Sfzoom = 0;
 	}else{
-		Sfzoom = (float)abs(Ulzoom) / (float)0x7FFFFFFF;
+		Sfzoom = abs(Ulzoom) / IntMaxValue;
 	}
 	if( Ullenz == 0){
 		Sflenz = 0;
 	}else{
-		Sflenz = (float)Ullenz / (float)0x7FFFFFFF;
+		Sflenz = Ullenz / IntMaxValue;
 	}
-	Ulshift = ( Ulshift & 0x0000FF00) >> 8 ;	
+	Ulshift = ( Ulshift & 0x0000FF00) >> 8 ;
 	Sfshift = 1;
 	for( i = 0 ; i < Ulshift ; i++ ){
 		Sfshift *= 2;
 	}
-	UlActChkLvl = (UINT_32)( (float)0x7FFFFFFF * SfLimit * Sfzoom * Sflenz * Sfshift * ACT_MARGIN );
+	UlActChkLvl = ( IntMaxValue * SfLimit * Sfzoom * Sflenz * Sfshift * ACT_MARGIN );
 
 	SlMeasureParameterNum	=	ACT_CHK_NUM ;
 
