@@ -16,7 +16,6 @@
 #include <linux/cred.h>
 
 #include <net/sock.h>
-#include <net/tcp.h>
 #include <net/inet_sock.h>
 #include <linux/netfilter/x_tables.h>
 #include <linux/netfilter/xt_owner.h>
@@ -68,24 +67,17 @@ owner_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	struct sock *sk = skb_to_full_sk(skb);
 	struct net *net = xt_net(par);
 
-	if (!sk || !sk->sk_socket || !net_eq(net, sock_net(sk)) || sk->sk_state == TCP_TIME_WAIT)
+	if (!sk || !sk->sk_socket || !net_eq(net, sock_net(sk)))
 		return (info->match ^ info->invert) == 0;
-
-        read_lock_bh(&sk->sk_callback_lock);
-
-	if (sk->sk_socket == NULL) {
-		read_unlock_bh(&sk->sk_callback_lock);
-		return (info->match ^ info->invert) == 0;
-	}
-
-	if (info->match & info->invert & XT_OWNER_SOCKET)
+	else if (info->match & info->invert & XT_OWNER_SOCKET)
 		/*
 		 * Socket exists but user wanted ! --socket-exists.
 		 * (Single ampersands intended.)
 		 */
-		goto out_false;
+		return false;
 
-	filp = sk->sk_socket->file;
+	read_lock_bh(&sk->sk_callback_lock);
+	filp = sk->sk_socket ? sk->sk_socket->file : NULL;
 	if (filp == NULL) {
 		read_unlock_bh(&sk->sk_callback_lock);
 		return ((info->match ^ info->invert) &
@@ -97,24 +89,42 @@ owner_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		kuid_t uid_max = make_kuid(net->user_ns, info->uid_max);
 		if ((uid_gte(filp->f_cred->fsuid, uid_min) &&
 		     uid_lte(filp->f_cred->fsuid, uid_max)) ^
-		    !(info->invert & XT_OWNER_UID))
-			goto out_false;
+		    !(info->invert & XT_OWNER_UID)) {
+			read_unlock_bh(&sk->sk_callback_lock);
+			return false;
+		}
 	}
 
 	if (info->match & XT_OWNER_GID) {
+		unsigned int i, match = false;
 		kgid_t gid_min = make_kgid(net->user_ns, info->gid_min);
 		kgid_t gid_max = make_kgid(net->user_ns, info->gid_max);
-		if ((gid_gte(filp->f_cred->fsgid, gid_min) &&
-		     gid_lte(filp->f_cred->fsgid, gid_max)) ^
-		    !(info->invert & XT_OWNER_GID))
-			goto out_false;
-	}
-        read_unlock_bh(&sk->sk_callback_lock);
-	return true;
+		struct group_info *gi = filp->f_cred->group_info;
 
-out_false:
+		if (gid_gte(filp->f_cred->fsgid, gid_min) &&
+		    gid_lte(filp->f_cred->fsgid, gid_max))
+			match = true;
+
+		if (!match && (info->match & XT_OWNER_SUPPL_GROUPS) && gi) {
+			for (i = 0; i < gi->ngroups; ++i) {
+				kgid_t group = gi->gid[i];
+
+				if (gid_gte(group, gid_min) &&
+				    gid_lte(group, gid_max)) {
+					match = true;
+					break;
+				}
+			}
+		}
+
+		if (match ^ !(info->invert & XT_OWNER_GID)) {
+			read_unlock_bh(&sk->sk_callback_lock);
+			return false;
+		}
+	}
+
 	read_unlock_bh(&sk->sk_callback_lock);
-	return false;
+	return true;
 }
 
 static struct xt_match owner_mt_reg __read_mostly = {
@@ -124,8 +134,7 @@ static struct xt_match owner_mt_reg __read_mostly = {
 	.checkentry = owner_check,
 	.match      = owner_mt,
 	.matchsize  = sizeof(struct xt_owner_match_info),
-	.hooks      = (1 << NF_INET_LOCAL_IN) |
-		      (1 << NF_INET_LOCAL_OUT) |
+	.hooks      = (1 << NF_INET_LOCAL_OUT) |
 	              (1 << NF_INET_POST_ROUTING),
 	.me         = THIS_MODULE,
 };
