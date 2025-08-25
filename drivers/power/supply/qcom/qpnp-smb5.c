@@ -4480,6 +4480,24 @@ static ssize_t smartchg_slow_charging_store(struct device *dev,
 					asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, max_current);
 				}
 			}
+			else if(tmp == 1) // fast charging
+			{
+				CHG_DBG_E("12W charging \n");
+				asus_disable_smb1390(true);
+				mdelay(1000);
+
+				max_current = 1500000;
+				asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, max_current);
+			}
+			else if(tmp == 2) // slow charging
+			{
+				CHG_DBG_E("9W charging \n");
+				asus_disable_smb1390(true);
+				mdelay(1000);
+
+				max_current = 1000000;
+				asus_exclusive_vote(smbchg_dev->usb_icl_votable, ASUS_SLOWCHG_VOTER, true, max_current);
+			}
 			 else 
 			{
 				CHG_DBG_E("Unexpected power %dW , do nothing \n", tmp);
