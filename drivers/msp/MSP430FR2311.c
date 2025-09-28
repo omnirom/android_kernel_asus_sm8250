@@ -859,7 +859,7 @@ int MSP430FR2311_Get_Steps(void) {
 //	int i=0;
 	
 //	for(i=0;i<2;i++, msleep(10)) 
-	if ( !MSP430_I2CWriteA(MSP430_READY_I2C, getsteps, sizeof(getsteps)) |!MSP430_I2CRead(MSP430_READY_I2C, steps, sizeof(steps)) ) {
+	if ( !MSP430_I2CWriteA(MSP430_READY_I2C, getsteps, sizeof(getsteps)) || !MSP430_I2CRead(MSP430_READY_I2C, steps, sizeof(steps)) ) {
 		pr_err("[MCU] %s I2C error!", __func__);
 		return -1;
 	}
@@ -896,7 +896,7 @@ int MSP430FR2311_Get_Version(char * version) {
 
 	MSP430FR2311_wakeup(1);
 	for(i=0; i<3; i++){
-		if (!MSP430_I2CWriteA(MSP430_READY_I2C, i2cfwversion, sizeof(i2cfwversion))  | !MSP430_I2CWriteReadA(MSP430_READY_I2C, i2cfwversion, sizeof(i2cfwversion), version, 4)) {
+		if (!MSP430_I2CWriteA(MSP430_READY_I2C, i2cfwversion, sizeof(i2cfwversion))  || !MSP430_I2CWriteReadA(MSP430_READY_I2C, i2cfwversion, sizeof(i2cfwversion), version, 4)) {
 			pr_err("[MCU] %s I2C error!", __func__);
 			MSP430FR2311_wakeup(0);
 			return -1;
@@ -1468,7 +1468,7 @@ static void extract_mcu_data(void){
 	uint8_t EventState = 0;
 
 	CmdBuf[2] = 0xE0;
-	if (!MSP430_I2CWriteA_NoLog(MSP430_READY_I2C, CmdBuf, sizeof(CmdBuf)) | !MSP430_I2CRead_NoLog(MSP430_READY_I2C, rBuf, extract_mcu_len)) {
+	if (!MSP430_I2CWriteA_NoLog(MSP430_READY_I2C, CmdBuf, sizeof(CmdBuf)) || !MSP430_I2CRead_NoLog(MSP430_READY_I2C, rBuf, extract_mcu_len)) {
 		pr_err("[MCU] %s i2c read error!\n", __func__);
 		return;
 	}else{
@@ -1476,7 +1476,7 @@ static void extract_mcu_data(void){
 		
 		if(IS_MASK_SET(EventState, F_Status_AKMAngleChange)){		//report angle.
 			CmdBuf[2] = 0xE1;
-			if(!MSP430_I2CWriteA_NoLog(MSP430_READY_I2C, CmdBuf, sizeof(CmdBuf)) | !MSP430_I2CRead_NoLog(MSP430_READY_I2C, rBuf, 6)){
+			if(!MSP430_I2CWriteA_NoLog(MSP430_READY_I2C, CmdBuf, sizeof(CmdBuf)) || !MSP430_I2CRead_NoLog(MSP430_READY_I2C, rBuf, 6)){
 				pr_err("[MCU] %s cmd:0xE1 i2c read error!\n", __func__);
 			}else{
 				report_motor_event(MOTOR_ANGLE, ((rBuf[2]<<24) | (rBuf[3]<<16) | (rBuf[4]<<8)| rBuf[5]));
