@@ -79,17 +79,13 @@ static DEFINE_MUTEX(device_list_lock);
 static struct gf_dev gf;
 
 static struct gf_key_map maps[] = {
-	{ EV_KEY, GF_KEY_INPUT_HOME },
 	{ EV_KEY, GF_KEY_INPUT_MENU },
 	{ EV_KEY, GF_KEY_INPUT_BACK },
-	{ EV_KEY, GF_KEY_INPUT_POWER },
-    { EV_KEY, GF_KEY_INPUT_EARLYWAKEUP },
 #if defined(SUPPORT_NAV_EVENT)
 	{ EV_KEY, GF_NAV_INPUT_UP },
 	{ EV_KEY, GF_NAV_INPUT_DOWN },
 	{ EV_KEY, GF_NAV_INPUT_RIGHT },
 	{ EV_KEY, GF_NAV_INPUT_LEFT },
-	{ EV_KEY, GF_KEY_INPUT_CAMERA },
 	{ EV_KEY, GF_NAV_INPUT_CLICK },
 	{ EV_KEY, GF_NAV_INPUT_DOUBLE_CLICK },
 	{ EV_KEY, GF_NAV_INPUT_LONG_PRESS },
@@ -322,53 +318,9 @@ static void nav_event_input(struct gf_dev *gf_dev, gf_nav_event_t nav_event)
 	}
 }
 
-
-static void gf_kernel_key_input(struct gf_dev *gf_dev, struct gf_key *gf_key)
-{
-	uint32_t key_input = 0;
-
-	if (gf_key->key == GF_KEY_HOME) {
-		key_input = GF_KEY_INPUT_HOME;
-	} else if (gf_key->key == GF_KEY_POWER) {
-		key_input = GF_KEY_INPUT_POWER;
-	} else if (gf_key->key == GF_KEY_CAMERA) {
-		key_input = GF_KEY_INPUT_CAMERA;
-	} else {
-		/* add special key define */
-		key_input = gf_key->key;
-	}
-	pr_info("%s: received key event[%d], key=%d, value=%d\n",
-			__func__, key_input, gf_key->key, gf_key->value);
-
-	if ((GF_KEY_POWER == gf_key->key || GF_KEY_CAMERA == gf_key->key)
-			&& (gf_key->value == 1)) {
-		input_report_key(gf_dev->input, key_input, 1);
-		input_sync(gf_dev->input);
-		input_report_key(gf_dev->input, key_input, 0);
-		input_sync(gf_dev->input);
-	}
-
-	if (gf_key->key == GF_KEY_HOME) {
-		input_report_key(gf_dev->input, key_input, gf_key->value);
-		input_sync(gf_dev->input);
-	}
-
-//report earlywakeup event (832);asus_bsp++
-	if ((gf_key->key == 832 || gf_key->key == 834) && (gf_key->value == 1))
-	{
-		pr_info("[GDX_FP]: received key 832, send earlywakeup event F22 \n");
-		input_report_key(gf_dev->input, GF_KEY_INPUT_EARLYWAKEUP, 1);
-		input_sync(gf_dev->input);
-		input_report_key(gf_dev->input, GF_KEY_INPUT_EARLYWAKEUP, 0);
-		input_sync(gf_dev->input);
-	}
-//report earlywakeup event (832);asus_bsp--
-}
-
 static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct gf_dev *gf_dev = &gf;
-	struct gf_key gf_key;
 #if defined(SUPPORT_NAV_EVENT)
 	gf_nav_event_t nav_event = GF_NAV_NONE;
 #endif
@@ -413,16 +365,6 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	case GF_IOC_RESET:
 		pr_info("%s GF_IOC_RESET\n", __func__);
 		gf_hw_reset(gf_dev, 3);
-		break;
-
-	case GF_IOC_INPUT_KEY_EVENT:
-		if (copy_from_user(&gf_key, (void __user *)arg, sizeof(struct gf_key))) {
-			pr_err("failed to copy input key event from user to kernel\n");
-			retval = -EFAULT;
-			break;
-		}
-
-		gf_kernel_key_input(gf_dev, &gf_key);
 		break;
 
 #if defined(SUPPORT_NAV_EVENT)
