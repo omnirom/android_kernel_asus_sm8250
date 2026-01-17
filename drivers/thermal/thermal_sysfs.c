@@ -87,8 +87,8 @@ temp_show(struct device *dev, struct device_attribute *attr, char *buf)
 
 	ret = thermal_zone_get_temp(tz, &temperature);
 
-	if (ret)
-		return ret;
+	if (!ret)
+		return sprintf(buf, "%d\n", temperature);
 
 #ifdef ZS670KS  
 	if(tz->id == 89){
@@ -97,10 +97,16 @@ temp_show(struct device *dev, struct device_attribute *attr, char *buf)
 		G_virtual_therm_temp = smooth_virtual_therm_temp(temperature);
 		return sprintf(buf, "%d\n", G_virtual_therm_temp);
 	}else{
-		return sprintf(buf, "%d\n", temperature);
+		if (ret == -EAGAIN)
+			return -ENODATA;
+
+		return ret;
 	}
 #else
-	return sprintf(buf, "%d\n", temperature);
+	if (ret == -EAGAIN)
+		return -ENODATA;
+
+	return ret;
 #endif
 }
 
